@@ -12,7 +12,6 @@
 // @match        https://www.amazon.fr/vine/orders*
 // @match        https://www.amazon.fr/gp/profile/*
 // @match        https://www.amazon.fr/vine/resources
-// @match        file:///C:/Users/MegaMan/Downloads/%C3%89valuez%20vos%20achats.html
 // @icon         https://pickme.alwaysdata.net/img/RR-ICO-2.png
 // @updateURL    https://raw.githubusercontent.com/teitong/reviewremember/main/ReviewRemember.user.js
 // @downloadURL  https://raw.githubusercontent.com/teitong/reviewremember/main/ReviewRemember.user.js
