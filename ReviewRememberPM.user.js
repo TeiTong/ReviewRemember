@@ -2026,7 +2026,7 @@ body {
     const styleMenu = document.createElement('style');
     styleMenu.type = 'text/css';
     styleMenu.innerHTML = `
-#configPopup, #colorPickerPopup, #emailConfigPopup {
+#configPopupRR, #colorPickerPopup, #emailConfigPopup {
   position: fixed;
   top: 50%;
   left: 50%;
@@ -2046,42 +2046,42 @@ body {
   resize: both; /* Permet le redimensionnement horizontal et vertical */
 }
 
-#configPopup h2, #configPopup label {
+#configPopupRR h2, #configPopupRR label {
   color: #333;
   margin-bottom: 20px;
 }
 
-#configPopup h2, #colorPickerPopup h2 {
+#configPopupRR h2, #colorPickerPopup h2 {
   cursor: grab;
   font-size: 1.5em;
   text-align: center;
 }
 
-#configPopup label {
+#configPopupRR label {
   display: flex;
   align-items: center;
 }
 
-#configPopup label input[type="checkbox"] {
+#configPopupRR label input[type="checkbox"] {
   margin-right: 10px;
 }
 
-#configPopup .button-container,
+#configPopupRR .button-container,
 #emailConfigPopup .button-container,
-#configPopup .checkbox-container {
+#configPopupRR .checkbox-container {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
 }
 
-#configPopup .button-container button,
+#configPopupRR .button-container button,
 #emailConfigPopup .button-container,
-#configPopup .checkbox-container label {
+#configPopupRR .checkbox-container label {
   margin-bottom: 10px;
   flex-basis: 48%; /* Ajusté pour uniformiser l'apparence des boutons et des labels */
 }
 
-#configPopup button,
+#configPopupRR button,
 #emailConfigPopup button {
   padding: 5px 10px;
   background-color: #f3f3f3;
@@ -2091,31 +2091,31 @@ body {
   text-align: center;
 }
 
-#configPopup button:not(.full-width), #colorPickerPopup button:not(.full-width), #emailConfigPopup button:not(.full-width) {
+#configPopupRR button:not(.full-width), #colorPickerPopup button:not(.full-width), #emailConfigPopup button:not(.full-width) {
   margin-right: 1%;
   margin-left: 1%;
 }
 
-#configPopup button.full-width, #colorPickerPopup button.full-width, #emailConfigPopup button.full-width {
+#configPopupRR button.full-width, #colorPickerPopup button.full-width, #emailConfigPopup button.full-width {
   flex-basis: 48%;
   margin-right: 1%;
   margin-left: 1%;
 }
 
-#configPopup button:hover,
+#configPopupRR button:hover,
 #emailConfigPopup button:hover {
   background-color: #e8e8e8;
 }
 
-#configPopup button:active,
+#configPopupRR button:active,
 #emailConfigPopup button:active {
   background-color: #ddd;
 }
-#configPopup label.disabled {
+#configPopupRR label.disabled {
   color: #ccc;
 }
 
-#configPopup label.disabled input[type="checkbox"] {
+#configPopupRR label.disabled input[type="checkbox"] {
   cursor: not-allowed;
 }
 #saveConfig, #closeConfig, #saveColor, #closeColor, #saveTemplateButton, #closeEmailConfig, #deleteTemplateButton {
@@ -2351,13 +2351,13 @@ body {
 
     //Sauvegarde la configuration
     async function saveConfigRR() {
-        document.querySelectorAll('#configPopup input[type="checkbox"]').forEach(input => {
+        document.querySelectorAll('#configPopupRR input[type="checkbox"]').forEach(input => {
             //Stocke la valeur (true ou false) dans localStorage en tant que chaîne de caractères
             localStorage.setItem(input.name, input.checked.toString());
         });
         //alert('Configuration sauvegardée.');
         window.location.reload();
-        document.getElementById('configPopup').remove();
+        document.getElementById('configPopupRR').remove();
     }
 
     //Ajoute les boutons pour les actions spécifiques qui ne sont pas juste des toggles on/off
@@ -2479,7 +2479,7 @@ body {
         var mobileCss = document.createElement('style');
 
         mobileCss.textContent = `
-#configPopup, #emailConfigPopup {
+#configPopupRR, #emailConfigPopup {
   width: 350px !important;
   height: 600px;
 }
@@ -2490,7 +2490,7 @@ body {
 
 /* Taille dynamique pour mobile */
 @media (max-width: 600px) {
-  #configPopup {
+  #configPopupRR {
     width: 90%; /* Prendre 90% de la largeur de l'écran */
     height: 90%;
     margin: 10px auto; /* Ajout d'un peu de marge autour des popups */
