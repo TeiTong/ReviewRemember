@@ -1,8 +1,8 @@
 //==UserScript==
-// @name         ReviewRememberPM
+// @name         ReviewRemember
 // @namespace    http://tampermonkey.net/
 // @version      1.8.7
-// @description  Outils pour les avis Amazon (version PickMe)
+// @description  Outils pour les avis Amazon
 // @author       Créateur/Codeur principal : MegaMan / Codeur secondaire : Sulff
 // @match        https://www.amazon.fr/review/create-review*
 // @match        https://www.amazon.fr/reviews/edit-review*
@@ -13,8 +13,8 @@
 // @match        https://www.amazon.fr/gp/profile/*
 // @match        https://www.amazon.fr/vine/resources
 // @icon         https://pickme.alwaysdata.net/img/RR-ICO-2.png
-// @updateURL    https://raw.githubusercontent.com/teitong/reviewremember/main/ReviewRememberPM.user.js
-// @downloadURL  https://raw.githubusercontent.com/teitong/reviewremember/main/ReviewRememberPM.user.js
+// @updateURL    https://raw.githubusercontent.com/teitong/reviewremember/main/ReviewRemember.user.js
+// @downloadURL  https://raw.githubusercontent.com/teitong/reviewremember/main/ReviewRemember.user.js
 // @grant        GM_registerMenuCommand
 // @run-at       document-end
 //==/UserScript==
@@ -1578,7 +1578,6 @@ body {
         //Ajouter le bouton et l'email au conteneur d'actions
         actionsContainer.appendChild(button);
         actionsContainer.appendChild(emailSpan);
-        console.log("action", actionsContainer);
         //Ajouter le conteneur d'actions à l'en-tête
         if (header) {
             header.style.position = 'relative'; //S'assure que le positionnement absolu de actionsContainer fonctionne correctement
