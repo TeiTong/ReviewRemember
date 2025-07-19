@@ -2814,4 +2814,5 @@ li.a-last a span.larr {      /* Cible le span larr dans les li a-last */
             elem.style.display = 'none';
         }
     });
+    window.createConfigPopupRR = createConfigPopupRR;
 })();
