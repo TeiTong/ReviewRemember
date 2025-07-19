@@ -260,7 +260,7 @@
         popup.id = "colorPickerPopup";
         /*popup.style.cssText = `
         position: fixed;
-        z-index: 10001;
+        z-index: 10002;
         left: 50%;
         top: 50%;
         transform: translate(-50%, -50%);
@@ -1740,11 +1740,6 @@ body {
         mobileDesign();
     }
 
-    //Ajout pour avoir le bon logo/menu sur iPhone principalement
-    setTimeout(function() {
-        replaceImageUrl();
-    }, 50);
-
     if (enableDateFunction === 'true') {
         highlightDates();
     }
@@ -1809,7 +1804,7 @@ body {
         popup.id = "emailPopup";
         /* popup.style.cssText = `
         position: fixed;
-        z-index: 10001;
+        z-index: 10002;
         left: 50%;
         top: 50%;
         transform: translate(-50%, -50%);
@@ -2036,7 +2031,7 @@ body {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  z-index: 10000;
+  z-index: 10003;
   background-color: white;
   padding: 20px;
   border-radius: 8px;
