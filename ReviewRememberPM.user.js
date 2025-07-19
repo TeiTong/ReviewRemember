@@ -1,8 +1,8 @@
 //==UserScript==
-// @name         ReviewRemember
+// @name         ReviewRememberPM
 // @namespace    http://tampermonkey.net/
 // @version      1.8.7
-// @description  Outils pour les avis Amazon
+// @description  Outils pour les avis Amazon (version PickMe)
 // @author       Créateur/Codeur principal : MegaMan / Codeur secondaire : Sulff
 // @match        https://www.amazon.fr/review/create-review*
 // @match        https://www.amazon.fr/reviews/edit-review*
@@ -13,8 +13,8 @@
 // @match        https://www.amazon.fr/gp/profile/*
 // @match        https://www.amazon.fr/vine/resources
 // @icon         https://pickme.alwaysdata.net/img/RR-ICO-2.png
-// @updateURL    https://raw.githubusercontent.com/teitong/reviewremember/main/ReviewRemember.user.js
-// @downloadURL  https://raw.githubusercontent.com/teitong/reviewremember/main/ReviewRemember.user.js
+// @updateURL    https://raw.githubusercontent.com/teitong/reviewremember/main/ReviewRememberPM.user.js
+// @downloadURL  https://raw.githubusercontent.com/teitong/reviewremember/main/ReviewRememberPM.user.js
 // @grant        GM_registerMenuCommand
 // @run-at       document-end
 //==/UserScript==
@@ -72,33 +72,6 @@
     // => Cette fonction ne devrait pas poser de problème de fonctionnement si le mode PC est forcé sur mobile
     function isMobile() {
         return document.documentElement.classList.contains('a-mobile');
-    }
-
-    //On remplace l'image et son lien par notre menu
-    function replaceImageUrl() {
-        //Sélectionner le lien contenant l'image avec l'attribut alt "vine_logo_title"
-        var link = document.querySelector('a > img[alt="vine_logo_title"]') ? document.querySelector('a > img[alt="vine_logo_title"]').parentNode : null;
-
-        //Vérifier si le lien existe
-        if (link) {
-            //Sélectionner directement l'image à l'intérieur du lien
-            var img = link.querySelector('img');
-            //Remplacer l'URL de l'image
-            img.src = 'https://pickme.alwaysdata.net/img/RR.png';
-            if (localStorage.getItem('mobileEnabled') == 'true') {
-                img.style.maxHeight = '50px';
-                img.style.maxWidth = '100%';
-                img.style.height = 'auto';
-                img.style.width = 'auto';
-            }
-            //Modifier le comportement du lien pour empêcher le chargement de la page
-            link.onclick = function(event) {
-                //Empêcher l'action par défaut du lien
-                event.preventDefault();
-                //Appeler la fonction createConfigPopup
-                createConfigPopup();
-            };
-        }
     }
 
     //Export des avis
@@ -1766,7 +1739,6 @@ body {
         pageX = "X";
         mobileDesign();
     }
-    replaceImageUrl();
 
     //Ajout pour avoir le bon logo/menu sur iPhone principalement
     setTimeout(function() {
@@ -2257,7 +2229,7 @@ body {
     }
 
     //Crée la fenêtre popup de configuration avec la fonction de déplacement
-    async function createConfigPopup() {
+    async function createConfigPopupRR() {
         if (document.getElementById('configPopup')) {
             return; //Termine la fonction pour éviter de créer une nouvelle popup
         }
@@ -2412,7 +2384,7 @@ body {
     }
 
     //Ajouter la commande de menu "Paramètres"
-    GM_registerMenuCommand("Paramètres", createConfigPopup, "p");
+    GM_registerMenuCommand("Paramètres ReviewRemember", createConfigPopupRR, "p");
     //End
 
     let buttonsAdded = false; //Suivre si les boutons ont été ajoutés
