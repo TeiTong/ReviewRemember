@@ -2118,7 +2118,7 @@ body {
 #configPopupRR label.disabled input[type="checkbox"] {
   cursor: not-allowed;
 }
-#saveConfig, #closeConfig, #saveColor, #closeColor, #saveTemplateButton, #closeEmailConfig, #deleteTemplateButton {
+#saveConfigRR, #closeConfigRR, #saveColor, #closeColor, #saveTemplateButton, #closeEmailConfig, #deleteTemplateButton {
   padding: 8px 15px !important; /* Plus de padding pour un meilleur visuel */
   margin-top !important: 5px;
   border-radius: 5px !important; /* Bordures légèrement arrondies */
@@ -2129,11 +2129,11 @@ body {
   transition: background-color 0.3s ease !important; /* Transition pour l'effet au survol */
 }
 
-#saveConfig, #saveColor, #saveTemplateButton {
+#saveConfigRR, #saveColor, #saveTemplateButton {
   background-color: #4CAF50 !important; /* Vert pour le bouton "Enregistrer" */
 }
 
-#closeConfig, #closeColor, #closeEmailConfig, #deleteTemplateButton {
+#closeConfigRR, #closeColor, #closeEmailConfig, #deleteTemplateButton {
   background-color: #f44336 !important; /* Rouge pour le bouton "Fermer" */
 }
 
@@ -2141,7 +2141,7 @@ body {
   background-color: #45a049 !important; /* Assombrit le vert au survol */
 }
 
-#closeConfig:hover, #closeColor:hover, #closeEmailConfig:hover, #deleteTemplateButton:hover {
+#closeConfigRR:hover, #closeColor:hover, #closeEmailConfig:hover, #deleteTemplateButton:hover {
   background-color: #e53935 !important; /* Assombrit le rouge au survol */
 }
 #saveColor, #closeColor, #closeEmailConfig, #saveTemplateButton, #deleteTemplateButton {
@@ -2372,8 +2372,8 @@ body {
   <button id="purgeReview">Supprimer tous les avis</button>
 </div>
 <div class="button-container final-buttons">
-  <button class="full-width" id="saveConfig">Enregistrer</button>
-  <button class="full-width" id="closeConfig">Fermer</button>
+  <button class="full-width" id="saveConfigRR">Enregistrer</button>
+  <button class="full-width" id="closeConfigRR">Fermer</button>
 </div>
     `;
     }
