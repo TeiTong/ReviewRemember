@@ -2225,13 +2225,13 @@ body {
 
     //Crée la fenêtre popup de configuration avec la fonction de déplacement
     async function createConfigPopupRR() {
-        if (document.getElementById('configPopup')) {
+        if (document.getElementById('configPopupRR')) {
             return; //Termine la fonction pour éviter de créer une nouvelle popup
         }
         const popup = document.createElement('div');
-        popup.id = "configPopup";
+        popup.id = "configPopupRR";
         popup.innerHTML = `
-    <h2 id="configPopupHeader">Paramètres ReviewRemember v${version}<span id="closePopup" style="float: right; cursor: pointer;">&times;</span></h2>
+    <h2 id="configPopupHeader">Paramètres ReviewRemember v${version}<span id="closePopupRR" style="float: right; cursor: pointer;">&times;</span></h2>
     <div style="text-align: center; margin-bottom: 20px;">
         <p id="links-container" style="text-align: center;">
             <a href="https://pickme.alwaysdata.net/wiki/doku.php?id=plugins:reviewremember" target="_blank">
@@ -2264,8 +2264,8 @@ body {
   `;
         document.body.appendChild(popup);
 
-        document.getElementById('closePopup').addEventListener('click', () => {
-            document.getElementById('configPopup').remove();
+        document.getElementById('closePopupRR').addEventListener('click', () => {
+            document.getElementById('configPopupRR').remove();
         });
 
         //Ajoute des écouteurs pour les nouveaux boutons
@@ -2314,8 +2314,8 @@ body {
 
         dragElement(popup);
 
-        document.getElementById('saveConfig').addEventListener('click', saveConfig);
-        document.getElementById('closeConfig').addEventListener('click', () => popup.remove());
+        document.getElementById('saveConfigRR').addEventListener('click', saveConfigRR);
+        document.getElementById('closeConfigRR').addEventListener('click', () => popup.remove());
     }
 
     function createCheckbox(name, label, explanation = null, disabled = false) {
@@ -2350,7 +2350,7 @@ body {
     }
 
     //Sauvegarde la configuration
-    async function saveConfig() {
+    async function saveConfigRR() {
         document.querySelectorAll('#configPopup input[type="checkbox"]').forEach(input => {
             //Stocke la valeur (true ou false) dans localStorage en tant que chaîne de caractères
             localStorage.setItem(input.name, input.checked.toString());
@@ -2379,7 +2379,7 @@ body {
     }
 
     //Ajouter la commande de menu "Paramètres"
-    GM_registerMenuCommand("Paramètres ReviewRemember", createConfigPopupRR, "p");
+    GM_registerMenuCommand("Paramètres ReviewRemember", createConfigPopupRR, "r");
     //End
 
     let buttonsAdded = false; //Suivre si les boutons ont été ajoutés
