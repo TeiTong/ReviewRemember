@@ -2231,7 +2231,7 @@ body {
         const popup = document.createElement('div');
         popup.id = "configPopupRR";
         popup.innerHTML = `
-    <h2 id="configPopupHeader">Paramètres ReviewRemember (version PickMe) v${versionRR}<span id="closePopupRR" style="float: right; cursor: pointer;">&times;</span></h2>
+    <h2 id="configPopupHeader">Paramètres ReviewRemember v${versionRR}<span id="closePopupRR" style="float: right; cursor: pointer;">&times;</span></h2>
     <div style="text-align: center; margin-bottom: 20px;">
         <p id="links-container" style="text-align: center;">
             <a href="https://pickme.alwaysdata.net/wiki/doku.php?id=plugins:reviewremember" target="_blank">
@@ -2814,4 +2814,5 @@ li.a-last a span.larr {      /* Cible le span larr dans les li a-last */
             elem.style.display = 'none';
         }
     });
+    window.createConfigPopupRR = createConfigPopupRR;
 })();
