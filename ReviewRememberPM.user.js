@@ -24,8 +24,6 @@
     function initReviewRemember() {
         'use strict';
 
-        var versionRR = GM_info.script.version;
-
         const baseUrlPickme = "https://vinepick.me";
 
         const selectorTitle = 'reviewTitle';
@@ -1497,7 +1495,7 @@ body {
             }
             //Créer un conteneur pour le bouton et l'email qui seront alignés à droite
             const actionsContainer = document.createElement('div');
-            if (mobileEnabled == 'true') {
+            if (isMobile()) {
                 actionsContainer.style.cssText = 'right: 0; top: 0;';
             } else {
                 actionsContainer.style.cssText = 'text-align: right; position: absolute; right: 0; top: 0;';
@@ -1660,7 +1658,6 @@ body {
         var footerEnabled = 'false';
         var headerEnabled = localStorage.getItem('headerEnabled');
         var pageEnabled = localStorage.getItem('pageEnabled');
-        var mobileEnabled = localStorage.getItem('mobileEnabled');
         var emailEnabled = localStorage.getItem('emailEnabled');
         var lastUpdateEnabled = localStorage.getItem('lastUpdateEnabled');
         var targetPercentageEnabled = localStorage.getItem('targetPercentageEnabled');
@@ -1712,11 +1709,6 @@ body {
             localStorage.setItem('pageEnabled', pageEnabled);
         }
 
-        if (mobileEnabled === null) {
-            mobileEnabled = 'false';
-            localStorage.setItem('mobileEnabled', mobileEnabled);
-        }
-
         if (emailEnabled === null) {
             emailEnabled = 'true';
             localStorage.setItem('emailEnabled', emailEnabled);
@@ -1739,7 +1731,7 @@ body {
             localStorage.setItem('autoSaveEnabled', autoSaveEnabled);
         }
 
-        if (mobileEnabled === 'true') {
+        if (isMobile()) {
             pageX = "X";
             mobileDesign();
         }
@@ -2235,14 +2227,14 @@ body {
             const popup = document.createElement('div');
             popup.id = "configPopupRR";
             popup.innerHTML = `
-    <h2 id="configPopupHeader">Paramètres ReviewRemember v${versionRR}<span id="closePopupRR" style="float: right; cursor: pointer;">&times;</span></h2>
+    <h2 id="configPopupHeader">Paramètres ReviewRemember<span id="closePopupRR" style="float: right; cursor: pointer;">&times;</span></h2>
     <div style="text-align: center; margin-bottom: 20px;">
         <p id="links-container" style="text-align: center;">
             <a href="${baseUrlPickme}/wiki/doku.php?id=plugins:reviewremember" target="_blank">
                 <img src="${baseUrlPickme}/img/wiki.png" alt="Wiki ReviewRemember" style="vertical-align: middle; margin-right: 5px; width: 25px; height: 25px;">
                 Wiki ReviewRemember
             </a>
-            ${mobileEnabled == 'true' ? '<br>' : '<span id="separator"> | </span>'}
+            ${isMobile() ? '<br>' : '<span id="separator"> | </span>'}
             <a href="${baseUrlPickme}/wiki/doku.php?id=vine:comment_nous_aider_gratuitement" target="_blank">
                 <img src="${baseUrlPickme}/img/soutiens.png" alt="Soutenir gratuitement" style="vertical-align: middle; margin-right: 5px; width: 25px; height: 25px;">
                 Soutenir gratuitement
@@ -2250,6 +2242,7 @@ body {
         </p>
     </div>
     <div class="checkbox-container">
+      ${createCheckbox('RREnabled', 'Activer ReviewRemember', 'Active le module ReviewRemeber qui permet de gérer les avis produits (sauvegardes, modèles, génération de mails, ...)')}
       ${createCheckbox('autoSaveEnabled', 'Sauvegarde automatique des avis', 'Les avis sont sauvegardés dès que vous cliquez sur "Envoyer" sans avoir besoin de l\'enregistrer avant')}
       ${createCheckbox('enableDateFunction', 'Surlignage du statut des avis', 'Change la couleur du "Statut du commentaire" dans vos avis "En attente de vérification" en fonction de leur date d\'ancienneté. Entre 0 et 6 jours -> Bleu, 7 à 13 jours -> Vert, 14 à 29 jours -> Orange, plus de 30 jours -> Rouge')}
       ${createCheckbox('enableReviewStatusFunction', 'Surlignage des avis vérifiés', 'Change la couleur du "Statut du commentaire" dans vos avis "Vérifiées" en fonction de leur statut actuel (Approuvé, Non approuvé, etc...)')}
@@ -2258,7 +2251,6 @@ body {
       ${createCheckbox('lastUpdateEnabled', 'Afficher la date de la dernière modification du % d\'avis', 'Indique la date de la dernière modification du % des avis sur le compte')}
       ${createCheckbox('targetPercentageEnabled', 'Afficher le nombre d\'avis nécessaires pour atteindre un % cible', 'Affiche le nombre d\'avis qu\'il va être nécessaire de faire pour atteindre le % défini')}
       ${createCheckbox('headerEnabled', 'Cacher totalement l\'entête de la page', 'Cache le haut de la page Amazon, celle avec la zone de recherche et les menus')}
-      ${createCheckbox('mobileEnabled', 'Utiliser l\'affichage mobile', 'Optimise l\affichage sur mobile, pour éviter de mettre la "Version PC". Il est conseillé de cacher également l\'entête avec cette option.')}
       ${createCheckbox('pageEnabled', 'Affichage des pages en partie haute', 'En plus des pages de navigation en partie basse, ajoute également la navigation des pages en haut')}
       ${createCheckbox('emailEnabled', 'Génération automatique des emails', 'Permet de générer automatiquement des mails à destination du support vine pour faire retirer un produit de votre liste d\'avis. Attention, on ne peut générer un mail que si le produit a été vu au moins une fois dans la liste de l\'onglet "Commandes"')}
       ${createCheckbox('profilEnabled', 'Mise en avant des avis avec des votes utiles sur les profils Amazon','Surligne de la couleur définie les avis ayant un vote utile ou plus. Il est également mis en début de page. Le surlignage ne fonctionne pas si l\'avis possède des photos')}
@@ -2873,9 +2865,16 @@ li.a-last a span.larr {      /* Cible le span larr dans les li a-last */
         });
         window.createConfigPopupRR = createConfigPopupRR;
     }
-    if (document.readyState !== 'loading') {
-        initReviewRemember();
-    } else {
-        window.addEventListener('DOMContentLoaded', initReviewRemember);
+    var RREnabled = localStorage.getItem('RREnabled');
+    if (RREnabled === null) {
+        RREnabled = 'true';
+        localStorage.setItem('RREnabled', RREnabled);
+    }
+    if (RREnabled === 'true') {
+        if (document.readyState !== 'loading') {
+            initReviewRemember();
+        } else {
+            window.addEventListener('DOMContentLoaded', initReviewRemember);
+        }
     }
 })();
