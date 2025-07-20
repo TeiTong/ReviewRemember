@@ -21,8 +21,598 @@
 //==/UserScript==
 
 (function() {
+
+    'use strict';
+    //Ajout du menu
+
+    //Création de la popup pour les raisons de refus
+    function createEmailPopup() {
+        if (document.getElementById('emailTemplates')) {
+            return; //Termine la fonction pour éviter de créer une nouvelle popup
+        }
+        //Création de la popup
+        const popup = document.createElement('div');
+        popup.id = "emailPopup";
+        /* popup.style.cssText = `
+        position: fixed;
+        z-index: 10002;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        padding: 20px;
+        background-color: white;
+        border: 1px solid #ccc;
+        box-shadow: 0px 0px 10px #ccc;
+    `;*/
+        popup.innerHTML = `
+<div id="emailConfigPopup">
+<div style="position: relative;">
+    <h2 id="emailPopupHeader" style="text-align: center;">Configuration des Emails</h2>
+    <span id="closeEmailPopup" style="position: absolute; right: 10px; top: 10px; cursor: pointer;">&times;</span>
+</div>
+<div id="emailTemplates" style="display: flex; flex-direction: column; align-items: center;">
+    <h3>Modèles existants</h3>
+    <select id="existingTemplates" style="margin-bottom: 10px;margin-top: 10px;"></select>
+<div style="display: flex; flex-direction: row; align-items: center; width: 100%;">
+    <button id="loadTemplateButton" class="button-container action-buttons" style="text-align: center; margin-right: 10px; display: flex; align-items: center; justify-content: center;">Charger le modèle</button>
+    <button id="loadMultiProductTemplateButton" class="button-container action-buttons" style="text-align: center; display: flex; align-items: center; justify-content: center;">Charger le modèle multiproduits</button>
+</div>
+</div>
+<div id="templateDetails">
+    <h3 id="templateActionTitle" style="text-align: center;">Ajouter un nouveau modèle</h3>
+    <input type="text" id="templateTitle" placeholder="Titre du modèle" style="margin-right: 10px; margin-bottom: 10px; margin-top: 10px;" />
+    <span id="helpIcon" style="cursor: pointer; font-size: 15px; user-select: none;">?</span>
+    <textarea id="templateText" placeholder="Texte du modèle" rows="10"></textarea>
+    <div class="button-container action-buttons">
+    <button id="saveTemplateButton" class="full-width">Ajouter</button>
+    <button id="closeEmailConfig" class="full-width">Fermer</button>
+    <button id="deleteTemplateButton" class="full-width" style="display:none; text-align: center;margin-top: 10px">Supprimer</button>
+    </div>
+</div>
+</div>
+`;
+
+        document.body.appendChild(popup);
+
+        document.getElementById('helpIcon').addEventListener('click', function() {
+            alert('Informations sur la rédaction des modèles.\n\n' +
+                  'Liste des variables qui seront remplacées lors de la génération du mail :\n' +
+                  '- $asin : ASIN du produit\n' +
+                  '- $order : numéro de commande\n' +
+                  '- $reason : raison de la suppression\n' +
+                  '- $nom : nom du produit\n' +
+                  '- $date : date de la commande\n\n' +
+                  'Sur le mail multiproduits, les balises $debut et $fin délimitent la zone de texte qui sera générée pour chaque produit.\n\n' +
+                  'Le titre du modèle servira aussi de raison de suppression lors de la génération multiproduits ($reason).');
+        });
+
+        //Boutons et leurs événements
+        document.getElementById('closeEmailPopup').addEventListener('click', () => popup.remove());
+        document.getElementById('closeEmailConfig').addEventListener('click', () => popup.remove());
+        document.getElementById('saveTemplateButton').addEventListener('click', saveEmailTemplate);
+        document.getElementById('loadTemplateButton').addEventListener('click', loadSelectedTemplate);
+        document.getElementById('deleteTemplateButton').addEventListener('click', deleteSelectedTemplate);
+        document.getElementById('loadMultiProductTemplateButton').addEventListener('click', loadMultiProductTemplate);
+
+        //Charger les modèles existants dans la liste déroulante
+        loadEmailTemplatesDropdown();
+    }
+
+    function loadMultiProductTemplate() {
+        const multiProductTemplateKey = 'multiProductEmailTemplate';
+        //Charger le modèle multiproduits ou initialiser avec le modèle par défaut
+        let multiProductTemplate = JSON.parse(localStorage.getItem(multiProductTemplateKey));
+        if (!multiProductTemplate) {
+            initmultiProductTemplate();
+        }
+
+        //Remplissez les champs avec les données du modèle multiproduits
+        document.getElementById('templateTitle').value = multiProductTemplate.title;
+        document.getElementById('templateText').value = multiProductTemplate.text;
+
+        //Changez l'interface pour refléter que l'utilisateur modifie le modèle multiproduits
+        document.getElementById('templateActionTitle').innerText = 'Modifier le modèle multiproduits';
+        document.getElementById('saveTemplateButton').innerText = 'Enregistrer';
+        document.getElementById('deleteTemplateButton').style.display = 'none'; //Cache le bouton supprimer car ce modèle ne peut pas être supprimé
+
+        //Stockez l'index ou la clé du modèle multiproduits
+        selectedTemplateIndex = multiProductTemplateKey; //Utilisez une clé spéciale ou un index pour identifier le modèle multiproduits
+    }
+
+    function initmultiProductTemplate() {
+        const multiProductTemplateKey = 'multiProductEmailTemplate';
+        const defaultMultiProductTemplate = {
+            title: 'Mail multiproduits',
+            text: 'Bonjour,\n\nVoici une liste de commande à supprimer de mes avis :\n$debut\nASIN : $asin\nCommande : $order\nRaison : $raison\n$fin\nCordialement.'
+        };
+        const multiProductTemplate = defaultMultiProductTemplate;
+        localStorage.setItem(multiProductTemplateKey, JSON.stringify(multiProductTemplate));
+    }
+
+    function loadEmailTemplatesDropdown() {
+        //Charger la liste des modèles existants dans la liste déroulante
+        const templates = JSON.parse(localStorage.getItem('emailTemplates') || '[]');
+        const templatesDropdown = document.getElementById('existingTemplates');
+        templatesDropdown.innerHTML = templates.map((template, index) =>
+                                                    `<option value="${index}">${template.title}</option>`
+                                                   ).join('');
+        templatesDropdown.selectedIndex = -1; //Aucune sélection par défaut
+    }
+
+    function addEmailTemplate() {
+        const title = document.getElementById('newTemplateTitle').value;
+        const text = document.getElementById('newTemplateText').value;
+        if (title && text) {
+            const templates = JSON.parse(localStorage.getItem('emailTemplates') || '[]');
+            templates.push({ title, text });
+            localStorage.setItem('emailTemplates', JSON.stringify(templates));
+            loadEmailTemplates(); //Recharger la liste des modèles
+        } else {
+            alert('Veuillez remplir le titre et le texte du modèle.');
+        }
+    }
+
+    function loadSelectedTemplate() {
+        const selectedIndex = document.getElementById('existingTemplates').value;
+        if (selectedIndex !== null) {
+            const templates = JSON.parse(localStorage.getItem('emailTemplates') || '[]');
+            const selectedTemplate = templates[selectedIndex];
+            document.getElementById('templateTitle').value = selectedTemplate.title;
+            document.getElementById('templateText').value = selectedTemplate.text;
+            selectedTemplateIndex = selectedIndex; //Mettre à jour l'index sélectionné
+
+            //Mettre à jour les textes des boutons et afficher le bouton Supprimer
+            document.getElementById('templateActionTitle').innerText = 'Modifier le modèle';
+            document.getElementById('saveTemplateButton').innerText = 'Enregistrer';
+            document.getElementById('deleteTemplateButton').style.display = 'inline';
+        }
+    }
+
+    function loadEmailTemplates() {
+        const templates = JSON.parse(localStorage.getItem('emailTemplates') || '[]');
+        const templatesContainer = document.getElementById('existingTemplates');
+        templatesContainer.innerHTML = '';
+        templates.forEach((template, index) => {
+            const templateDiv = document.createElement('div');
+            templateDiv.className = 'template-entry';
+            templateDiv.dataset.index = index;
+            templateDiv.innerHTML = `
+<b>${template.title}</b>
+<p>${template.text}</p>
+`;
+            templateDiv.onclick = function() {
+                selectTemplate(this);
+            }
+            templatesContainer.appendChild(templateDiv);
+        });
+    }
+
+    function selectTemplate(element) {
+        //Désélectionner le précédent élément sélectionné
+        document.querySelectorAll('.template-entry.selected').forEach(e => e.classList.remove('selected'));
+
+        //Sélectionner le nouvel élément
+        element.classList.add('selected');
+        selectedTemplateIndex = parseInt(element.dataset.index);
+
+        //Remplir les champs de modification avec les données du modèle sélectionné
+        const templates = JSON.parse(localStorage.getItem('emailTemplates') || '[]');
+        if (templates[selectedTemplateIndex]) {
+            document.getElementById('editTemplateTitle').value = templates[selectedTemplateIndex].title;
+            document.getElementById('editTemplateText').value = templates[selectedTemplateIndex].text;
+        }
+    }
+
+    function saveEmailTemplate() {
+        const title = document.getElementById('templateTitle').value;
+        const text = document.getElementById('templateText').value;
+        const templates = JSON.parse(localStorage.getItem('emailTemplates') || '[]');
+
+        if (title.trim() === '' || text.trim() === '') {
+            alert('Le titre et le texte du modèle ne peuvent pas être vides.');
+            return;
+        }
+        if (selectedTemplateIndex === 'multiProductEmailTemplate') { //Si le modèle multiproduits est en cours de modification
+            const title = document.getElementById('templateTitle').value;
+            const text = document.getElementById('templateText').value;
+            const multiProductTemplate = { title, text };
+            localStorage.setItem('multiProductEmailTemplate', JSON.stringify(multiProductTemplate));
+        } else if (selectedTemplateIndex !== null) { //Si un modèle est sélectionné, le mettre à jour
+            templates[selectedTemplateIndex] = { title, text };
+            selectedTemplateIndex = null; //Réinitialiser l'index sélectionné après la sauvegarde
+        } else { //Sinon, ajouter un nouveau modèle
+            templates.push({ title, text });
+        }
+
+        localStorage.setItem('emailTemplates', JSON.stringify(templates));
+        loadEmailTemplatesDropdown(); //Recharger la liste déroulante
+
+        clearTemplateFields(); //Fonction pour vider les champs
+    }
+
+    function clearTemplateFields() {
+        //Vider les champs de saisie et réinitialiser les libellés des boutons
+        document.getElementById('templateTitle').value = '';
+        document.getElementById('templateText').value = '';
+        document.getElementById('templateActionTitle').innerText = 'Ajouter un nouveau modèle';
+        document.getElementById('saveTemplateButton').innerText = 'Ajouter';
+        document.getElementById('deleteTemplateButton').style.display = 'none';
+
+        //Réinitialiser l'index sélectionné
+        selectedTemplateIndex = null;
+    }
+
+    function deleteSelectedTemplate() {
+        if (selectedTemplateIndex !== null && confirm('Êtes-vous sûr de vouloir supprimer ce modèle ?')) {
+            const templates = JSON.parse(localStorage.getItem('emailTemplates') || '[]');
+            templates.splice(selectedTemplateIndex, 1);
+            localStorage.setItem('emailTemplates', JSON.stringify(templates));
+            loadEmailTemplatesDropdown(); //Recharger la liste déroulante
+
+            clearTemplateFields(); //Fonction pour vider les champs
+        }
+    }
+    let selectedTemplateIndex = null; //Index du modèle sélectionné
+
+    const styleMenu = document.createElement('style');
+    styleMenu.type = 'text/css';
+    styleMenu.innerHTML = `
+#configPopupRR, #colorPickerPopup, #emailConfigPopup {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10003;
+  background-color: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  width: 500px; /* Ajusté pour mieux s'adapter aux deux colonnes de checkbox */
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  cursor: auto;
+  border: 2px solid #ccc; /* Ajout d'un contour */
+  overflow: auto; /* Ajout de défilement si nécessaire */
+  resize: both; /* Permet le redimensionnement horizontal et vertical */
+}
+
+#configPopupRR h2, #configPopupRR label {
+  color: #333;
+  margin-bottom: 20px;
+}
+
+#configPopupRR h2, #colorPickerPopup h2 {
+  cursor: grab;
+  font-size: 1.5em;
+  text-align: center;
+}
+
+#configPopupRR label {
+  display: flex;
+  align-items: center;
+}
+
+#configPopupRR label input[type="checkbox"] {
+  margin-right: 10px;
+}
+
+#configPopupRR .button-container,
+#emailConfigPopup .button-container,
+#configPopupRR .checkbox-container {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+#configPopupRR .button-container button,
+#emailConfigPopup .button-container,
+#configPopupRR .checkbox-container label {
+  margin-bottom: 10px;
+  flex-basis: 48%; /* Ajusté pour uniformiser l'apparence des boutons et des labels */
+}
+
+#configPopupRR button,
+#emailConfigPopup button {
+  padding: 5px 10px;
+  background-color: #f3f3f3;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: center;
+}
+
+#configPopupRR button:not(.full-width), #colorPickerPopup button:not(.full-width), #emailConfigPopup button:not(.full-width) {
+  margin-right: 1%;
+  margin-left: 1%;
+}
+
+#configPopupRR button.full-width, #colorPickerPopup button.full-width, #emailConfigPopup button.full-width {
+  flex-basis: 48%;
+  margin-right: 1%;
+  margin-left: 1%;
+}
+
+#configPopupRR button:hover,
+#emailConfigPopup button:hover {
+  background-color: #e8e8e8;
+}
+
+#configPopupRR button:active,
+#emailConfigPopup button:active {
+  background-color: #ddd;
+}
+#configPopupRR label.disabled {
+  color: #ccc;
+}
+
+#configPopupRR label.disabled input[type="checkbox"] {
+  cursor: not-allowed;
+}
+#saveConfigRR, #closeConfigRR, #saveColor, #closeColor, #saveTemplateButton, #closeEmailConfig, #deleteTemplateButton {
+  padding: 8px 15px !important; /* Plus de padding pour un meilleur visuel */
+  margin-top !important: 5px;
+  border-radius: 5px !important; /* Bordures légèrement arrondies */
+  font-weight: bold !important; /* Texte en gras */
+  border: none !important; /* Supprime la bordure par défaut */
+  color: white !important; /* Texte en blanc */
+  cursor: pointer !important;
+  transition: background-color 0.3s ease !important; /* Transition pour l'effet au survol */
+}
+
+#saveConfigRR, #saveColor, #saveTemplateButton {
+  background-color: #4CAF50 !important; /* Vert pour le bouton "Enregistrer" */
+}
+
+#closeConfigRR, #closeColor, #closeEmailConfig, #deleteTemplateButton {
+  background-color: #f44336 !important; /* Rouge pour le bouton "Fermer" */
+}
+
+#saveConfig:hover, #saveColor:hover, #saveTemplateButton:hover {
+  background-color: #45a049 !important; /* Assombrit le vert au survol */
+}
+
+#closeConfigRR:hover, #closeColor:hover, #closeEmailConfig:hover, #deleteTemplateButton:hover {
+  background-color: #e53935 !important; /* Assombrit le rouge au survol */
+}
+#saveColor, #closeColor, #closeEmailConfig, #saveTemplateButton, #deleteTemplateButton {
+  margin-top: 10px; /* Ajoute un espace de 10px au-dessus du second bouton */
+  width: 100%; /* Utilise width: 100% pour assurer que le bouton prend toute la largeur */
+}
+
+#existingTemplates {
+    border: 1px solid #ccc;
+    padding: 4px;
+    margin-top: 10px;
+    margin-bottom: 10px;
+    background-color: white;
+    width: auto; /* ou une largeur spécifique selon votre design */
+}
+/* Quand un bouton est seul sur une ligne */
+/*
+#reviewColor {
+  flex-basis: 100% !important; /* Prend la pleine largeur pour forcer à aller sur une nouvelle ligne */
+  margin-right: 1% !important; /* Annuler la marge droite si elle est définie ailleurs */
+  margin-left: 1% !important; /* Annuler la marge droite si elle est définie ailleurs */
+}*/
+`;
+    document.head.appendChild(styleMenu);
+
+    //Fonction pour afficher une boîte de dialogue pour définir le pourcentage cible
+    function promptForTargetPercentage() {
+        const storedValue = localStorage.getItem('gestavisTargetPercentage');
+        const targetPercentage = prompt('Entrez le pourcentage cible à atteindre (entre 60 et 100):', storedValue);
+        if (targetPercentage !== null) {
+            const parsedValue = parseFloat(targetPercentage);
+            if (!isNaN(parsedValue) && parsedValue >= 60 && parsedValue <= 100) {
+                localStorage.setItem('gestavisTargetPercentage', parsedValue);
+            } else {
+                alert('Pourcentage invalide. Veuillez entrer un nombre entre 60 et 100.');
+            }
+        }
+    }
+
+    //Fonction pour rendre la fenêtre déplaçable
+    function dragElement(elmnt) {
+        var pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+        if (document.getElementById(elmnt.id + "Header")) {
+            //si présent, le header est l'endroit où vous pouvez déplacer la DIV:
+            document.getElementById(elmnt.id + "Header").onmousedown = dragMouseDown;
+        } else {
+            //sinon, déplace la DIV de n'importe quel endroit à l'intérieur de la DIV:
+            elmnt.onmousedown = dragMouseDown;
+        }
+
+        function dragMouseDown(e) {
+            e = e || window.event;
+            e.preventDefault();
+            //position de la souris au démarrage:
+            pos3 = e.clientX;
+            pos4 = e.clientY;
+            document.onmouseup = closeDragElement;
+            //appelle la fonction chaque fois que le curseur bouge:
+            document.onmousemove = elementDrag;
+        }
+
+        function elementDrag(e) {
+            e = e || window.event;
+            e.preventDefault();
+            //calcule la nouvelle position de la souris:
+            pos1 = pos3 - e.clientX;
+            pos2 = pos4 - e.clientY;
+            pos3 = e.clientX;
+            pos4 = e.clientY;
+            //définit la nouvelle position de l'élément:
+            elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
+            elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
+        }
+
+        function closeDragElement() {
+            //arrête le mouvement quand le bouton de la souris est relâché:
+            document.onmouseup = null;
+            document.onmousemove = null;
+        }
+    }
+
+    //Crée la fenêtre popup de configuration avec la fonction de déplacement
+    async function createConfigPopupRR() {
+        if (document.getElementById('configPopupRR')) {
+            return; //Termine la fonction pour éviter de créer une nouvelle popup
+        }
+        const popup = document.createElement('div');
+        popup.id = "configPopupRR";
+        popup.innerHTML = `
+    <h2 id="configPopupHeader">Paramètres ReviewRemember<span id="closePopupRR" style="float: right; cursor: pointer;">&times;</span></h2>
+    <div style="text-align: center; margin-bottom: 20px;">
+        <p id="links-container" style="text-align: center;">
+            <a href="${baseUrlPickme}/wiki/doku.php?id=plugins:reviewremember" target="_blank">
+                <img src="${baseUrlPickme}/img/wiki.png" alt="Wiki ReviewRemember" style="vertical-align: middle; margin-right: 5px; width: 25px; height: 25px;">
+                Wiki ReviewRemember
+            </a>
+            ${isMobile() ? '<br>' : '<span id="separator"> | </span>'}
+            <a href="${baseUrlPickme}/wiki/doku.php?id=vine:comment_nous_aider_gratuitement" target="_blank">
+                <img src="${baseUrlPickme}/img/soutiens.png" alt="Soutenir gratuitement" style="vertical-align: middle; margin-right: 5px; width: 25px; height: 25px;">
+                Soutenir gratuitement
+            </a>
+        </p>
+    </div>
+    <div class="checkbox-container">
+      ${createCheckbox('RREnabled', 'Activer ReviewRemember', 'Active le module ReviewRemeber qui permet de gérer les avis produits (sauvegardes, modèles, génération de mails, ...)')}
+      ${createCheckbox('autoSaveEnabled', 'Sauvegarde automatique des avis', 'Les avis sont sauvegardés dès que vous cliquez sur "Envoyer" sans avoir besoin de l\'enregistrer avant')}
+      ${createCheckbox('enableDateFunction', 'Surlignage du statut des avis', 'Change la couleur du "Statut du commentaire" dans vos avis "En attente de vérification" en fonction de leur date d\'ancienneté. Entre 0 et 6 jours -> Bleu, 7 à 13 jours -> Vert, 14 à 29 jours -> Orange, plus de 30 jours -> Rouge')}
+      ${createCheckbox('enableReviewStatusFunction', 'Surlignage des avis vérifiés', 'Change la couleur du "Statut du commentaire" dans vos avis "Vérifiées" en fonction de leur statut actuel (Approuvé, Non approuvé, etc...)')}
+      ${createCheckbox('enableColorFunction', 'Changer la couleur de la barre de progression des avis', 'Change la couleur de la barre de progression des avis sur la page "Compte". Entre 0 et 59% -> Rouge, 60 à 89% -> Orange et supérieur à 90% -> Vert')}
+      ${createCheckbox('filterEnabled', 'Cacher les avis approuvés', 'Dans l\'onglet "Vérifiées" de vos avis, si l\'avis  est Approuvé, alors il est caché')}
+      ${createCheckbox('lastUpdateEnabled', 'Afficher la date de la dernière modification du % d\'avis', 'Indique la date de la dernière modification du % des avis sur le compte')}
+      ${createCheckbox('targetPercentageEnabled', 'Afficher le nombre d\'avis nécessaires pour atteindre un % cible', 'Affiche le nombre d\'avis qu\'il va être nécessaire de faire pour atteindre le % défini')}
+      ${createCheckbox('headerEnabled', 'Cacher totalement l\'entête de la page', 'Cache le haut de la page Amazon, celle avec la zone de recherche et les menus')}
+      ${createCheckbox('pageEnabled', 'Affichage des pages en partie haute', 'En plus des pages de navigation en partie basse, ajoute également la navigation des pages en haut')}
+      ${createCheckbox('emailEnabled', 'Génération automatique des emails', 'Permet de générer automatiquement des mails à destination du support vine pour faire retirer un produit de votre liste d\'avis. Attention, on ne peut générer un mail que si le produit a été vu au moins une fois dans la liste de l\'onglet "Commandes"')}
+      ${createCheckbox('profilEnabled', 'Mise en avant des avis avec des votes utiles sur les profils Amazon','Surligne de la couleur définie les avis ayant un vote utile ou plus. Il est également mis en début de page. Le surlignage ne fonctionne pas si l\'avis possède des photos')}
+      ${false ? createCheckbox('footerEnabled', 'Supprimer le footer sur les profils Amazon (à décocher si les avis ne se chargent pas)', 'Supprime le bas de page sur les pages de profil Amazon, cela permet de charger plus facilement les avis sans descendre tout en bas de la page. Cela ne fonctionne que sur PC, donc à désactiver si vous avez le moindre problème sur cette page') : ''}
+       </div>
+    ${addActionButtons()}
+  `;
+        document.body.appendChild(popup);
+
+        document.getElementById('closePopupRR').addEventListener('click', () => {
+            document.getElementById('configPopupRR').remove();
+        });
+
+        //Ajoute des écouteurs pour les nouveaux boutons
+        document.getElementById('emailPopup').addEventListener('click', createEmailPopup);
+        document.getElementById('reviewColor').addEventListener('click', setHighlightColor);
+        document.getElementById('exportCSV').addEventListener('click', exportReviewsToCSV);
+
+        document.getElementById('targetPercentageEnabled').addEventListener('click', function() {
+            if (this.checked) {
+                promptForTargetPercentage();
+            }
+        });
+
+        document.getElementById('purgeTemplate').addEventListener('click', () => {
+            if (confirm("Êtes-vous sûr de vouloir supprimer tous les modèles d'avis ?")) {
+                deleteAllTemplates();
+                reloadButtons();
+            }
+        });
+
+        document.getElementById('purgeReview').addEventListener('click', () => {
+            if (confirm("Êtes-vous sûr de vouloir supprimer tous les avis ?")) {
+                deleteAllReviews();
+                reloadButtons();
+            }
+        });
+        //Import
+        document.getElementById('importCSV').addEventListener('click', function() {
+            document.getElementById('fileInput').click();
+        });
+
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.id = 'fileInput';
+        fileInput.style.display = 'none'; //Le rend invisible
+        fileInput.accept = '.csv'; //Accepte uniquement les fichiers .csv
+
+        //Ajoute l'élément input au body du document
+        document.body.appendChild(fileInput);
+        document.getElementById('fileInput').addEventListener('change', function(event) {
+            const file = event.target.files[0]; //Obtient le fichier sélectionné
+            if (file) {
+                readAndImportCSV(file); //Envoie le fichier à la fonction
+            }
+        });
+
+        dragElement(popup);
+
+        document.getElementById('saveConfigRR').addEventListener('click', saveConfigRR);
+        document.getElementById('closeConfigRR').addEventListener('click', () => popup.remove());
+    }
+
+    function createCheckbox(name, label, explanation = null, disabled = false) {
+        const isChecked = localStorage.getItem(name) === 'true' ? 'checked' : '';
+        const isDisabled = disabled ? 'disabled' : '';
+        //Choisis la couleur ici. Options: 'black', 'white', 'gray'
+        const color = 'gray'; //Exemple: change cette valeur pour 'black', 'white', ou une autre couleur CSS valide
+
+        //Génération de l'ID unique pour le span d'aide
+        const helpSpanId = `help-span-${name}`;
+
+        //Icône d'aide avec gestionnaire d'événements attaché via addEventListener
+        const helpIcon = explanation ? `<span id="${helpSpanId}" style="text-decoration: none; cursor: help; margin-left: 4px; color: ${color}; font-size: 16px;">?</span>` : '';
+        const checkboxHtml = `<label class="${isDisabled ? 'disabled' : ''}">
+              <input type="checkbox" id="${name}" name="${name}" ${isChecked} ${isDisabled}>
+              ${label} ${helpIcon}
+          </label>`;
+
+        //Attacher le gestionnaire d'événements après le rendu de l'HTML
+        setTimeout(() => {
+            const helpSpan = document.getElementById(helpSpanId);
+            if (helpSpan) {
+                helpSpan.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    alert(explanation); //Ou toute autre logique d'affichage d'explication
+                });
+            }
+        }, 0);
+
+        return checkboxHtml;
+    }
+
+    //Sauvegarde la configuration
+    async function saveConfigRR() {
+        document.querySelectorAll('#configPopupRR input[type="checkbox"]').forEach(input => {
+            //Stocke la valeur (true ou false) dans localStorage en tant que chaîne de caractères
+            localStorage.setItem(input.name, input.checked.toString());
+        });
+        //alert('Configuration sauvegardée.');
+        document.getElementById('configPopupRR').remove();
+    }
+
+    //Ajoute les boutons pour les actions spécifiques qui ne sont pas juste des toggles on/off
+    function addActionButtons() {
+        return `
+<div class="button-container action-buttons">
+  <button id="emailPopup">Configurer les emails</button><br>
+  <button id="reviewColor">Couleur de bordure des avis</button><br>
+  <button id="exportCSV">Exporter les avis en CSV</button>
+  <button id="importCSV">Importer les avis en CSV</button>
+  <button id="purgeTemplate">Supprimer tous les modèles d'avis</button>
+  <button id="purgeReview">Supprimer tous les avis</button>
+</div>
+<div class="button-container final-buttons">
+  <button class="full-width" id="saveConfigRR">Enregistrer</button>
+  <button class="full-width" id="closeConfigRR">Fermer</button>
+</div>
+    `;
+    }
+
+    //Ajouter la commande de menu "Paramètres"
+    GM_registerMenuCommand("Paramètres ReviewRemember", createConfigPopupRR, "r");
+    //End
+
     function initReviewRemember() {
-        'use strict';
 
         const baseUrlPickme = "https://vinepick.me";
 
@@ -1787,594 +2377,6 @@ body {
         if (autoSaveEnabled === 'true') {
             autoSaveReview();
         }
-        //End
-        //Ajout du menu
-
-        //Création de la popup pour les raisons de refus
-        function createEmailPopup() {
-            if (document.getElementById('emailTemplates')) {
-                return; //Termine la fonction pour éviter de créer une nouvelle popup
-            }
-            //Création de la popup
-            const popup = document.createElement('div');
-            popup.id = "emailPopup";
-            /* popup.style.cssText = `
-        position: fixed;
-        z-index: 10002;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
-        padding: 20px;
-        background-color: white;
-        border: 1px solid #ccc;
-        box-shadow: 0px 0px 10px #ccc;
-    `;*/
-            popup.innerHTML = `
-<div id="emailConfigPopup">
-<div style="position: relative;">
-    <h2 id="emailPopupHeader" style="text-align: center;">Configuration des Emails</h2>
-    <span id="closeEmailPopup" style="position: absolute; right: 10px; top: 10px; cursor: pointer;">&times;</span>
-</div>
-<div id="emailTemplates" style="display: flex; flex-direction: column; align-items: center;">
-    <h3>Modèles existants</h3>
-    <select id="existingTemplates" style="margin-bottom: 10px;margin-top: 10px;"></select>
-<div style="display: flex; flex-direction: row; align-items: center; width: 100%;">
-    <button id="loadTemplateButton" class="button-container action-buttons" style="text-align: center; margin-right: 10px; display: flex; align-items: center; justify-content: center;">Charger le modèle</button>
-    <button id="loadMultiProductTemplateButton" class="button-container action-buttons" style="text-align: center; display: flex; align-items: center; justify-content: center;">Charger le modèle multiproduits</button>
-</div>
-</div>
-<div id="templateDetails">
-    <h3 id="templateActionTitle" style="text-align: center;">Ajouter un nouveau modèle</h3>
-    <input type="text" id="templateTitle" placeholder="Titre du modèle" style="margin-right: 10px; margin-bottom: 10px; margin-top: 10px;" />
-    <span id="helpIcon" style="cursor: pointer; font-size: 15px; user-select: none;">?</span>
-    <textarea id="templateText" placeholder="Texte du modèle" rows="10"></textarea>
-    <div class="button-container action-buttons">
-    <button id="saveTemplateButton" class="full-width">Ajouter</button>
-    <button id="closeEmailConfig" class="full-width">Fermer</button>
-    <button id="deleteTemplateButton" class="full-width" style="display:none; text-align: center;margin-top: 10px">Supprimer</button>
-    </div>
-</div>
-</div>
-`;
-
-            document.body.appendChild(popup);
-
-            document.getElementById('helpIcon').addEventListener('click', function() {
-                alert('Informations sur la rédaction des modèles.\n\n' +
-                      'Liste des variables qui seront remplacées lors de la génération du mail :\n' +
-                      '- $asin : ASIN du produit\n' +
-                      '- $order : numéro de commande\n' +
-                      '- $reason : raison de la suppression\n' +
-                      '- $nom : nom du produit\n' +
-                      '- $date : date de la commande\n\n' +
-                      'Sur le mail multiproduits, les balises $debut et $fin délimitent la zone de texte qui sera générée pour chaque produit.\n\n' +
-                      'Le titre du modèle servira aussi de raison de suppression lors de la génération multiproduits ($reason).');
-            });
-
-            //Boutons et leurs événements
-            document.getElementById('closeEmailPopup').addEventListener('click', () => popup.remove());
-            document.getElementById('closeEmailConfig').addEventListener('click', () => popup.remove());
-            document.getElementById('saveTemplateButton').addEventListener('click', saveEmailTemplate);
-            document.getElementById('loadTemplateButton').addEventListener('click', loadSelectedTemplate);
-            document.getElementById('deleteTemplateButton').addEventListener('click', deleteSelectedTemplate);
-            document.getElementById('loadMultiProductTemplateButton').addEventListener('click', loadMultiProductTemplate);
-
-            //Charger les modèles existants dans la liste déroulante
-            loadEmailTemplatesDropdown();
-        }
-
-        function loadMultiProductTemplate() {
-            const multiProductTemplateKey = 'multiProductEmailTemplate';
-            //Charger le modèle multiproduits ou initialiser avec le modèle par défaut
-            let multiProductTemplate = JSON.parse(localStorage.getItem(multiProductTemplateKey));
-            if (!multiProductTemplate) {
-                initmultiProductTemplate();
-            }
-
-            //Remplissez les champs avec les données du modèle multiproduits
-            document.getElementById('templateTitle').value = multiProductTemplate.title;
-            document.getElementById('templateText').value = multiProductTemplate.text;
-
-            //Changez l'interface pour refléter que l'utilisateur modifie le modèle multiproduits
-            document.getElementById('templateActionTitle').innerText = 'Modifier le modèle multiproduits';
-            document.getElementById('saveTemplateButton').innerText = 'Enregistrer';
-            document.getElementById('deleteTemplateButton').style.display = 'none'; //Cache le bouton supprimer car ce modèle ne peut pas être supprimé
-
-            //Stockez l'index ou la clé du modèle multiproduits
-            selectedTemplateIndex = multiProductTemplateKey; //Utilisez une clé spéciale ou un index pour identifier le modèle multiproduits
-        }
-
-        function initmultiProductTemplate() {
-            const multiProductTemplateKey = 'multiProductEmailTemplate';
-            const defaultMultiProductTemplate = {
-                title: 'Mail multiproduits',
-                text: 'Bonjour,\n\nVoici une liste de commande à supprimer de mes avis :\n$debut\nASIN : $asin\nCommande : $order\nRaison : $raison\n$fin\nCordialement.'
-            };
-            const multiProductTemplate = defaultMultiProductTemplate;
-            localStorage.setItem(multiProductTemplateKey, JSON.stringify(multiProductTemplate));
-        }
-
-        function loadEmailTemplatesDropdown() {
-            //Charger la liste des modèles existants dans la liste déroulante
-            const templates = JSON.parse(localStorage.getItem('emailTemplates') || '[]');
-            const templatesDropdown = document.getElementById('existingTemplates');
-            templatesDropdown.innerHTML = templates.map((template, index) =>
-                                                        `<option value="${index}">${template.title}</option>`
-                                                       ).join('');
-            templatesDropdown.selectedIndex = -1; //Aucune sélection par défaut
-        }
-
-        function addEmailTemplate() {
-            const title = document.getElementById('newTemplateTitle').value;
-            const text = document.getElementById('newTemplateText').value;
-            if (title && text) {
-                const templates = JSON.parse(localStorage.getItem('emailTemplates') || '[]');
-                templates.push({ title, text });
-                localStorage.setItem('emailTemplates', JSON.stringify(templates));
-                loadEmailTemplates(); //Recharger la liste des modèles
-            } else {
-                alert('Veuillez remplir le titre et le texte du modèle.');
-            }
-        }
-
-        function loadSelectedTemplate() {
-            const selectedIndex = document.getElementById('existingTemplates').value;
-            if (selectedIndex !== null) {
-                const templates = JSON.parse(localStorage.getItem('emailTemplates') || '[]');
-                const selectedTemplate = templates[selectedIndex];
-                document.getElementById('templateTitle').value = selectedTemplate.title;
-                document.getElementById('templateText').value = selectedTemplate.text;
-                selectedTemplateIndex = selectedIndex; //Mettre à jour l'index sélectionné
-
-                //Mettre à jour les textes des boutons et afficher le bouton Supprimer
-                document.getElementById('templateActionTitle').innerText = 'Modifier le modèle';
-                document.getElementById('saveTemplateButton').innerText = 'Enregistrer';
-                document.getElementById('deleteTemplateButton').style.display = 'inline';
-            }
-        }
-
-        function loadEmailTemplates() {
-            const templates = JSON.parse(localStorage.getItem('emailTemplates') || '[]');
-            const templatesContainer = document.getElementById('existingTemplates');
-            templatesContainer.innerHTML = '';
-            templates.forEach((template, index) => {
-                const templateDiv = document.createElement('div');
-                templateDiv.className = 'template-entry';
-                templateDiv.dataset.index = index;
-                templateDiv.innerHTML = `
-<b>${template.title}</b>
-<p>${template.text}</p>
-`;
-                templateDiv.onclick = function() {
-                    selectTemplate(this);
-                }
-                templatesContainer.appendChild(templateDiv);
-            });
-        }
-
-        function selectTemplate(element) {
-            //Désélectionner le précédent élément sélectionné
-            document.querySelectorAll('.template-entry.selected').forEach(e => e.classList.remove('selected'));
-
-            //Sélectionner le nouvel élément
-            element.classList.add('selected');
-            selectedTemplateIndex = parseInt(element.dataset.index);
-
-            //Remplir les champs de modification avec les données du modèle sélectionné
-            const templates = JSON.parse(localStorage.getItem('emailTemplates') || '[]');
-            if (templates[selectedTemplateIndex]) {
-                document.getElementById('editTemplateTitle').value = templates[selectedTemplateIndex].title;
-                document.getElementById('editTemplateText').value = templates[selectedTemplateIndex].text;
-            }
-        }
-
-        function saveEmailTemplate() {
-            const title = document.getElementById('templateTitle').value;
-            const text = document.getElementById('templateText').value;
-            const templates = JSON.parse(localStorage.getItem('emailTemplates') || '[]');
-
-            if (title.trim() === '' || text.trim() === '') {
-                alert('Le titre et le texte du modèle ne peuvent pas être vides.');
-                return;
-            }
-            if (selectedTemplateIndex === 'multiProductEmailTemplate') { //Si le modèle multiproduits est en cours de modification
-                const title = document.getElementById('templateTitle').value;
-                const text = document.getElementById('templateText').value;
-                const multiProductTemplate = { title, text };
-                localStorage.setItem('multiProductEmailTemplate', JSON.stringify(multiProductTemplate));
-            } else if (selectedTemplateIndex !== null) { //Si un modèle est sélectionné, le mettre à jour
-                templates[selectedTemplateIndex] = { title, text };
-                selectedTemplateIndex = null; //Réinitialiser l'index sélectionné après la sauvegarde
-            } else { //Sinon, ajouter un nouveau modèle
-                templates.push({ title, text });
-            }
-
-            localStorage.setItem('emailTemplates', JSON.stringify(templates));
-            loadEmailTemplatesDropdown(); //Recharger la liste déroulante
-
-            clearTemplateFields(); //Fonction pour vider les champs
-        }
-
-        function clearTemplateFields() {
-            //Vider les champs de saisie et réinitialiser les libellés des boutons
-            document.getElementById('templateTitle').value = '';
-            document.getElementById('templateText').value = '';
-            document.getElementById('templateActionTitle').innerText = 'Ajouter un nouveau modèle';
-            document.getElementById('saveTemplateButton').innerText = 'Ajouter';
-            document.getElementById('deleteTemplateButton').style.display = 'none';
-
-            //Réinitialiser l'index sélectionné
-            selectedTemplateIndex = null;
-        }
-
-        function deleteSelectedTemplate() {
-            if (selectedTemplateIndex !== null && confirm('Êtes-vous sûr de vouloir supprimer ce modèle ?')) {
-                const templates = JSON.parse(localStorage.getItem('emailTemplates') || '[]');
-                templates.splice(selectedTemplateIndex, 1);
-                localStorage.setItem('emailTemplates', JSON.stringify(templates));
-                loadEmailTemplatesDropdown(); //Recharger la liste déroulante
-
-                clearTemplateFields(); //Fonction pour vider les champs
-            }
-        }
-        let selectedTemplateIndex = null; //Index du modèle sélectionné
-
-        const styleMenu = document.createElement('style');
-        styleMenu.type = 'text/css';
-        styleMenu.innerHTML = `
-#configPopupRR, #colorPickerPopup, #emailConfigPopup {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 10003;
-  background-color: white;
-  padding: 20px;
-  border-radius: 8px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-  width: 500px; /* Ajusté pour mieux s'adapter aux deux colonnes de checkbox */
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  cursor: auto;
-  border: 2px solid #ccc; /* Ajout d'un contour */
-  overflow: auto; /* Ajout de défilement si nécessaire */
-  resize: both; /* Permet le redimensionnement horizontal et vertical */
-}
-
-#configPopupRR h2, #configPopupRR label {
-  color: #333;
-  margin-bottom: 20px;
-}
-
-#configPopupRR h2, #colorPickerPopup h2 {
-  cursor: grab;
-  font-size: 1.5em;
-  text-align: center;
-}
-
-#configPopupRR label {
-  display: flex;
-  align-items: center;
-}
-
-#configPopupRR label input[type="checkbox"] {
-  margin-right: 10px;
-}
-
-#configPopupRR .button-container,
-#emailConfigPopup .button-container,
-#configPopupRR .checkbox-container {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-}
-
-#configPopupRR .button-container button,
-#emailConfigPopup .button-container,
-#configPopupRR .checkbox-container label {
-  margin-bottom: 10px;
-  flex-basis: 48%; /* Ajusté pour uniformiser l'apparence des boutons et des labels */
-}
-
-#configPopupRR button,
-#emailConfigPopup button {
-  padding: 5px 10px;
-  background-color: #f3f3f3;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  cursor: pointer;
-  text-align: center;
-}
-
-#configPopupRR button:not(.full-width), #colorPickerPopup button:not(.full-width), #emailConfigPopup button:not(.full-width) {
-  margin-right: 1%;
-  margin-left: 1%;
-}
-
-#configPopupRR button.full-width, #colorPickerPopup button.full-width, #emailConfigPopup button.full-width {
-  flex-basis: 48%;
-  margin-right: 1%;
-  margin-left: 1%;
-}
-
-#configPopupRR button:hover,
-#emailConfigPopup button:hover {
-  background-color: #e8e8e8;
-}
-
-#configPopupRR button:active,
-#emailConfigPopup button:active {
-  background-color: #ddd;
-}
-#configPopupRR label.disabled {
-  color: #ccc;
-}
-
-#configPopupRR label.disabled input[type="checkbox"] {
-  cursor: not-allowed;
-}
-#saveConfigRR, #closeConfigRR, #saveColor, #closeColor, #saveTemplateButton, #closeEmailConfig, #deleteTemplateButton {
-  padding: 8px 15px !important; /* Plus de padding pour un meilleur visuel */
-  margin-top !important: 5px;
-  border-radius: 5px !important; /* Bordures légèrement arrondies */
-  font-weight: bold !important; /* Texte en gras */
-  border: none !important; /* Supprime la bordure par défaut */
-  color: white !important; /* Texte en blanc */
-  cursor: pointer !important;
-  transition: background-color 0.3s ease !important; /* Transition pour l'effet au survol */
-}
-
-#saveConfigRR, #saveColor, #saveTemplateButton {
-  background-color: #4CAF50 !important; /* Vert pour le bouton "Enregistrer" */
-}
-
-#closeConfigRR, #closeColor, #closeEmailConfig, #deleteTemplateButton {
-  background-color: #f44336 !important; /* Rouge pour le bouton "Fermer" */
-}
-
-#saveConfig:hover, #saveColor:hover, #saveTemplateButton:hover {
-  background-color: #45a049 !important; /* Assombrit le vert au survol */
-}
-
-#closeConfigRR:hover, #closeColor:hover, #closeEmailConfig:hover, #deleteTemplateButton:hover {
-  background-color: #e53935 !important; /* Assombrit le rouge au survol */
-}
-#saveColor, #closeColor, #closeEmailConfig, #saveTemplateButton, #deleteTemplateButton {
-  margin-top: 10px; /* Ajoute un espace de 10px au-dessus du second bouton */
-  width: 100%; /* Utilise width: 100% pour assurer que le bouton prend toute la largeur */
-}
-
-#existingTemplates {
-    border: 1px solid #ccc;
-    padding: 4px;
-    margin-top: 10px;
-    margin-bottom: 10px;
-    background-color: white;
-    width: auto; /* ou une largeur spécifique selon votre design */
-}
-/* Quand un bouton est seul sur une ligne */
-/*
-#reviewColor {
-  flex-basis: 100% !important; /* Prend la pleine largeur pour forcer à aller sur une nouvelle ligne */
-  margin-right: 1% !important; /* Annuler la marge droite si elle est définie ailleurs */
-  margin-left: 1% !important; /* Annuler la marge droite si elle est définie ailleurs */
-}*/
-`;
-        document.head.appendChild(styleMenu);
-
-        //Fonction pour afficher une boîte de dialogue pour définir le pourcentage cible
-        function promptForTargetPercentage() {
-            const storedValue = localStorage.getItem('gestavisTargetPercentage');
-            const targetPercentage = prompt('Entrez le pourcentage cible à atteindre (entre 60 et 100):', storedValue);
-            if (targetPercentage !== null) {
-                const parsedValue = parseFloat(targetPercentage);
-                if (!isNaN(parsedValue) && parsedValue >= 60 && parsedValue <= 100) {
-                    localStorage.setItem('gestavisTargetPercentage', parsedValue);
-                } else {
-                    alert('Pourcentage invalide. Veuillez entrer un nombre entre 60 et 100.');
-                }
-            }
-        }
-
-        //Fonction pour rendre la fenêtre déplaçable
-        function dragElement(elmnt) {
-            var pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
-            if (document.getElementById(elmnt.id + "Header")) {
-                //si présent, le header est l'endroit où vous pouvez déplacer la DIV:
-                document.getElementById(elmnt.id + "Header").onmousedown = dragMouseDown;
-            } else {
-                //sinon, déplace la DIV de n'importe quel endroit à l'intérieur de la DIV:
-                elmnt.onmousedown = dragMouseDown;
-            }
-
-            function dragMouseDown(e) {
-                e = e || window.event;
-                e.preventDefault();
-                //position de la souris au démarrage:
-                pos3 = e.clientX;
-                pos4 = e.clientY;
-                document.onmouseup = closeDragElement;
-                //appelle la fonction chaque fois que le curseur bouge:
-                document.onmousemove = elementDrag;
-            }
-
-            function elementDrag(e) {
-                e = e || window.event;
-                e.preventDefault();
-                //calcule la nouvelle position de la souris:
-                pos1 = pos3 - e.clientX;
-                pos2 = pos4 - e.clientY;
-                pos3 = e.clientX;
-                pos4 = e.clientY;
-                //définit la nouvelle position de l'élément:
-                elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
-                elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
-            }
-
-            function closeDragElement() {
-                //arrête le mouvement quand le bouton de la souris est relâché:
-                document.onmouseup = null;
-                document.onmousemove = null;
-            }
-        }
-
-        //Crée la fenêtre popup de configuration avec la fonction de déplacement
-        async function createConfigPopupRR() {
-            if (document.getElementById('configPopupRR')) {
-                return; //Termine la fonction pour éviter de créer une nouvelle popup
-            }
-            const popup = document.createElement('div');
-            popup.id = "configPopupRR";
-            popup.innerHTML = `
-    <h2 id="configPopupHeader">Paramètres ReviewRemember<span id="closePopupRR" style="float: right; cursor: pointer;">&times;</span></h2>
-    <div style="text-align: center; margin-bottom: 20px;">
-        <p id="links-container" style="text-align: center;">
-            <a href="${baseUrlPickme}/wiki/doku.php?id=plugins:reviewremember" target="_blank">
-                <img src="${baseUrlPickme}/img/wiki.png" alt="Wiki ReviewRemember" style="vertical-align: middle; margin-right: 5px; width: 25px; height: 25px;">
-                Wiki ReviewRemember
-            </a>
-            ${isMobile() ? '<br>' : '<span id="separator"> | </span>'}
-            <a href="${baseUrlPickme}/wiki/doku.php?id=vine:comment_nous_aider_gratuitement" target="_blank">
-                <img src="${baseUrlPickme}/img/soutiens.png" alt="Soutenir gratuitement" style="vertical-align: middle; margin-right: 5px; width: 25px; height: 25px;">
-                Soutenir gratuitement
-            </a>
-        </p>
-    </div>
-    <div class="checkbox-container">
-      ${createCheckbox('RREnabled', 'Activer ReviewRemember', 'Active le module ReviewRemeber qui permet de gérer les avis produits (sauvegardes, modèles, génération de mails, ...)')}
-      ${createCheckbox('autoSaveEnabled', 'Sauvegarde automatique des avis', 'Les avis sont sauvegardés dès que vous cliquez sur "Envoyer" sans avoir besoin de l\'enregistrer avant')}
-      ${createCheckbox('enableDateFunction', 'Surlignage du statut des avis', 'Change la couleur du "Statut du commentaire" dans vos avis "En attente de vérification" en fonction de leur date d\'ancienneté. Entre 0 et 6 jours -> Bleu, 7 à 13 jours -> Vert, 14 à 29 jours -> Orange, plus de 30 jours -> Rouge')}
-      ${createCheckbox('enableReviewStatusFunction', 'Surlignage des avis vérifiés', 'Change la couleur du "Statut du commentaire" dans vos avis "Vérifiées" en fonction de leur statut actuel (Approuvé, Non approuvé, etc...)')}
-      ${createCheckbox('enableColorFunction', 'Changer la couleur de la barre de progression des avis', 'Change la couleur de la barre de progression des avis sur la page "Compte". Entre 0 et 59% -> Rouge, 60 à 89% -> Orange et supérieur à 90% -> Vert')}
-      ${createCheckbox('filterEnabled', 'Cacher les avis approuvés', 'Dans l\'onglet "Vérifiées" de vos avis, si l\'avis  est Approuvé, alors il est caché')}
-      ${createCheckbox('lastUpdateEnabled', 'Afficher la date de la dernière modification du % d\'avis', 'Indique la date de la dernière modification du % des avis sur le compte')}
-      ${createCheckbox('targetPercentageEnabled', 'Afficher le nombre d\'avis nécessaires pour atteindre un % cible', 'Affiche le nombre d\'avis qu\'il va être nécessaire de faire pour atteindre le % défini')}
-      ${createCheckbox('headerEnabled', 'Cacher totalement l\'entête de la page', 'Cache le haut de la page Amazon, celle avec la zone de recherche et les menus')}
-      ${createCheckbox('pageEnabled', 'Affichage des pages en partie haute', 'En plus des pages de navigation en partie basse, ajoute également la navigation des pages en haut')}
-      ${createCheckbox('emailEnabled', 'Génération automatique des emails', 'Permet de générer automatiquement des mails à destination du support vine pour faire retirer un produit de votre liste d\'avis. Attention, on ne peut générer un mail que si le produit a été vu au moins une fois dans la liste de l\'onglet "Commandes"')}
-      ${createCheckbox('profilEnabled', 'Mise en avant des avis avec des votes utiles sur les profils Amazon','Surligne de la couleur définie les avis ayant un vote utile ou plus. Il est également mis en début de page. Le surlignage ne fonctionne pas si l\'avis possède des photos')}
-      ${false ? createCheckbox('footerEnabled', 'Supprimer le footer sur les profils Amazon (à décocher si les avis ne se chargent pas)', 'Supprime le bas de page sur les pages de profil Amazon, cela permet de charger plus facilement les avis sans descendre tout en bas de la page. Cela ne fonctionne que sur PC, donc à désactiver si vous avez le moindre problème sur cette page') : ''}
-       </div>
-    ${addActionButtons()}
-  `;
-            document.body.appendChild(popup);
-
-            document.getElementById('closePopupRR').addEventListener('click', () => {
-                document.getElementById('configPopupRR').remove();
-            });
-
-            //Ajoute des écouteurs pour les nouveaux boutons
-            document.getElementById('emailPopup').addEventListener('click', createEmailPopup);
-            document.getElementById('reviewColor').addEventListener('click', setHighlightColor);
-            document.getElementById('exportCSV').addEventListener('click', exportReviewsToCSV);
-
-            document.getElementById('targetPercentageEnabled').addEventListener('click', function() {
-                if (this.checked) {
-                    promptForTargetPercentage();
-                }
-            });
-
-            document.getElementById('purgeTemplate').addEventListener('click', () => {
-                if (confirm("Êtes-vous sûr de vouloir supprimer tous les modèles d'avis ?")) {
-                    deleteAllTemplates();
-                    reloadButtons();
-                }
-            });
-
-            document.getElementById('purgeReview').addEventListener('click', () => {
-                if (confirm("Êtes-vous sûr de vouloir supprimer tous les avis ?")) {
-                    deleteAllReviews();
-                    reloadButtons();
-                }
-            });
-            //Import
-            document.getElementById('importCSV').addEventListener('click', function() {
-                document.getElementById('fileInput').click();
-            });
-
-            const fileInput = document.createElement('input');
-            fileInput.type = 'file';
-            fileInput.id = 'fileInput';
-            fileInput.style.display = 'none'; //Le rend invisible
-            fileInput.accept = '.csv'; //Accepte uniquement les fichiers .csv
-
-            //Ajoute l'élément input au body du document
-            document.body.appendChild(fileInput);
-            document.getElementById('fileInput').addEventListener('change', function(event) {
-                const file = event.target.files[0]; //Obtient le fichier sélectionné
-                if (file) {
-                    readAndImportCSV(file); //Envoie le fichier à la fonction
-                }
-            });
-
-            dragElement(popup);
-
-            document.getElementById('saveConfigRR').addEventListener('click', saveConfigRR);
-            document.getElementById('closeConfigRR').addEventListener('click', () => popup.remove());
-        }
-
-        function createCheckbox(name, label, explanation = null, disabled = false) {
-            const isChecked = localStorage.getItem(name) === 'true' ? 'checked' : '';
-            const isDisabled = disabled ? 'disabled' : '';
-            //Choisis la couleur ici. Options: 'black', 'white', 'gray'
-            const color = 'gray'; //Exemple: change cette valeur pour 'black', 'white', ou une autre couleur CSS valide
-
-            //Génération de l'ID unique pour le span d'aide
-            const helpSpanId = `help-span-${name}`;
-
-            //Icône d'aide avec gestionnaire d'événements attaché via addEventListener
-            const helpIcon = explanation ? `<span id="${helpSpanId}" style="text-decoration: none; cursor: help; margin-left: 4px; color: ${color}; font-size: 16px;">?</span>` : '';
-            const checkboxHtml = `<label class="${isDisabled ? 'disabled' : ''}">
-              <input type="checkbox" id="${name}" name="${name}" ${isChecked} ${isDisabled}>
-              ${label} ${helpIcon}
-          </label>`;
-
-            //Attacher le gestionnaire d'événements après le rendu de l'HTML
-            setTimeout(() => {
-                const helpSpan = document.getElementById(helpSpanId);
-                if (helpSpan) {
-                    helpSpan.addEventListener('click', (event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        alert(explanation); //Ou toute autre logique d'affichage d'explication
-                    });
-                }
-            }, 0);
-
-            return checkboxHtml;
-        }
-
-        //Sauvegarde la configuration
-        async function saveConfigRR() {
-            document.querySelectorAll('#configPopupRR input[type="checkbox"]').forEach(input => {
-                //Stocke la valeur (true ou false) dans localStorage en tant que chaîne de caractères
-                localStorage.setItem(input.name, input.checked.toString());
-            });
-            //alert('Configuration sauvegardée.');
-            document.getElementById('configPopupRR').remove();
-        }
-
-        //Ajoute les boutons pour les actions spécifiques qui ne sont pas juste des toggles on/off
-        function addActionButtons() {
-            return `
-<div class="button-container action-buttons">
-  <button id="emailPopup">Configurer les emails</button><br>
-  <button id="reviewColor">Couleur de bordure des avis</button><br>
-  <button id="exportCSV">Exporter les avis en CSV</button>
-  <button id="importCSV">Importer les avis en CSV</button>
-  <button id="purgeTemplate">Supprimer tous les modèles d'avis</button>
-  <button id="purgeReview">Supprimer tous les avis</button>
-</div>
-<div class="button-container final-buttons">
-  <button class="full-width" id="saveConfigRR">Enregistrer</button>
-  <button class="full-width" id="closeConfigRR">Fermer</button>
-</div>
-    `;
-        }
-
-        //Ajouter la commande de menu "Paramètres"
-        GM_registerMenuCommand("Paramètres ReviewRemember", createConfigPopupRR, "r");
         //End
 
         let buttonsAdded = false; //Suivre si les boutons ont été ajoutés
