@@ -12,7 +12,7 @@
 // @match        https://www.amazon.fr/vine/orders*
 // @match        https://www.amazon.fr/gp/profile/*
 // @match        https://www.amazon.fr/vine/resources
-// @icon         https://pickme.alwaysdata.net/img/RR-ICO-2.png
+// @icon         https://vinepick.me/img/RR-ICO-2.png
 // @updateURL    https://raw.githubusercontent.com/teitong/reviewremember/main/ReviewRememberPM.user.js
 // @downloadURL  https://raw.githubusercontent.com/teitong/reviewremember/main/ReviewRememberPM.user.js
 // @grant        GM_registerMenuCommand
@@ -23,6 +23,8 @@
     'use strict';
 
     var versionRR = GM_info.script.version;
+
+    const baseUrlPickme = "https://vinepick.me";
 
     const selectorTitle = 'reviewTitle';
     const selectorReview = 'reviewText';
@@ -2234,13 +2236,13 @@ body {
     <h2 id="configPopupHeader">Paramètres ReviewRemember v${versionRR}<span id="closePopupRR" style="float: right; cursor: pointer;">&times;</span></h2>
     <div style="text-align: center; margin-bottom: 20px;">
         <p id="links-container" style="text-align: center;">
-            <a href="https://pickme.alwaysdata.net/wiki/doku.php?id=plugins:reviewremember" target="_blank">
-                <img src="https://pickme.alwaysdata.net/img/wiki.png" alt="Wiki ReviewRemember" style="vertical-align: middle; margin-right: 5px; width: 25px; height: 25px;">
+            <a href="${baseUrlPickme}/wiki/doku.php?id=plugins:reviewremember" target="_blank">
+                <img src="${baseUrlPickme}/img/wiki.png" alt="Wiki ReviewRemember" style="vertical-align: middle; margin-right: 5px; width: 25px; height: 25px;">
                 Wiki ReviewRemember
             </a>
             ${mobileEnabled == 'true' ? '<br>' : '<span id="separator"> | </span>'}
-            <a href="https://pickme.alwaysdata.net/wiki/doku.php?id=vine:comment_nous_aider_gratuitement" target="_blank">
-                <img src="https://pickme.alwaysdata.net/img/soutiens.png" alt="Soutenir gratuitement" style="vertical-align: middle; margin-right: 5px; width: 25px; height: 25px;">
+            <a href="${baseUrlPickme}/wiki/doku.php?id=vine:comment_nous_aider_gratuitement" target="_blank">
+                <img src="${baseUrlPickme}/img/soutiens.png" alt="Soutenir gratuitement" style="vertical-align: middle; margin-right: 5px; width: 25px; height: 25px;">
                 Soutenir gratuitement
             </a>
         </p>
