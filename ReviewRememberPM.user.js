@@ -23,7 +23,186 @@
 (function() {
 
     'use strict';
+    const baseUrlPickme = "https://vinepick.me";
+
+    const selectorTitle = 'reviewTitle';
+    const selectorReview = 'reviewText';
+    const selectorButtons = '.in-context-ryp__form_fields_container-desktop, .in-context-ryp__form_fields_container-mweb';
+
+    const selectorTitleOld = 'scarface-review-title-label';
+    const selectorReviewOld = 'scarface-review-text-card-title';
+    const selectorButtonsOld = '.ryp__submit-button-card__card-frame';
+
+    var reviewColor = localStorage.getItem('reviewColor');
+
+    // Fonction pour détecter si l'utilisateur est sur mobile (à ne pas confondre avec le mode mobile activable manuellement
+    // dans les paramètres utilisateur)
+    // Note : si le mode PC est forcé sur mobile, cette fonction renverra toujours false, ce qui est le comportement attendu,
+    // car les traitements spécifiques au PC s'exécuteront, et la structure HTML liée sera présente
+    // => Cette fonction ne devrait pas poser de problème de fonctionnement si le mode PC est forcé sur mobile
+    function isMobile() {
+        return document.documentElement.classList.contains('a-mobile');
+    }
+
+    //Export des avis
+    function exportReviewsToCSV() {
+        let csvContent = "\uFEFF"; // BOM pour UTF-8
+
+        //Ajouter l'en-tête du CSV
+        csvContent += "Type;Nom;ASIN;Titre de l'avis;Contenu de l'avis\n";
+
+        //Exporter les modèles
+        let savedTemplates = JSON.parse(localStorage.getItem('review_templates')) || [];
+        savedTemplates.forEach(template => {
+            const { name, title, review } = template;
+            //Ajoute une ligne détaillée pour chaque modèle avec une colonne vide pour ASIN
+            csvContent += `Modèle;${name};;${title.replace(/;/g, ',')};${review.replace(/\n/g, '\\n')}\n`;
+        });
+
+        //Itérer sur les éléments de localStorage
+        Object.keys(localStorage).forEach(function(key) {
+            if (key.startsWith('review_') && key !== 'review_templates') {
+                const reviewData = JSON.parse(localStorage.getItem(key));
+                const asin = key.replace('review_', ''); // Extraire l'ASIN
+                const title = reviewData.title.replace(/;/g, ','); // Remplacer les ";" par des ","
+                const review = reviewData.review.replace(/\n/g, '\\n');
+
+                //Ajouter la ligne pour les avis
+                csvContent += `Avis;;${asin};${title};${review}\n`;
+            }
+        });
+
+        //Créer un objet Blob avec le contenu CSV en spécifiant le type MIME
+        var blob = new Blob([csvContent], {type: "text/csv;charset=utf-8;"});
+        var url = URL.createObjectURL(blob);
+
+        //Créer un lien pour télécharger le fichier
+        var link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", "RR_backup.csv");
+        document.body.appendChild(link); // Nécessaire pour certains navigateurs
+
+        //Simuler un clic sur le lien pour déclencher le téléchargement
+        link.click();
+
+        //Nettoyer en supprimant le lien et en libérant l'objet URL
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }
+
+    //Import d'un fichier CSV
+    function readAndImportCSV(file) {
+        const reader = new FileReader();
+
+        reader.onload = function(event) {
+            const csv = event.target.result;
+            const lines = csv.split('\n');
+
+            for (let i = 1; i < lines.length; i++) {
+                if (lines[i]) {
+                    const columns = lines[i].split(';');
+                    if (columns.length >= 4) { // On s'assure qu'il y a assez de colonnes
+                        const type = columns[0].trim();
+                        const name = columns[1].trim();
+                        const asin = columns[2].trim();
+                        const title = columns[3].trim();
+                        const review = columns[4].trim().replace(/\\n/g, '\n'); // Remplacer \\n par de vrais retours à la ligne
+
+                        if (type === "Avis") {
+                            //Sauvegarder l'avis
+                            localStorage.setItem(`review_${asin}`, JSON.stringify({ title, review }));
+                        } else if (type === "Modèle") {
+                            //Ajouter ou remplacer le modèle dans le tableau
+                            let savedTemplates = JSON.parse(localStorage.getItem('review_templates')) || [];
+
+                            //Vérifier si un modèle avec le même nom existe déjà
+                            const existingIndex = savedTemplates.findIndex(template => template.name === name);
+
+                            if (existingIndex !== -1) {
+                                //Remplacer le modèle existant
+                                savedTemplates[existingIndex] = { name, title, review };
+                            } else {
+                                //Ajouter un nouveau modèle
+                                savedTemplates.push({ name, title, review });
+                            }
+
+                            localStorage.setItem('review_templates', JSON.stringify(savedTemplates));
+                        }
+                    }
+                }
+            }
+
+            alert('Importation terminée.');
+        };
+
+        reader.readAsText(file, 'UTF-8');
+    }
+
     //Ajout du menu
+    function setHighlightColor() {
+        //Extraire les composantes r, g, b de la couleur actuelle
+        const rgbaMatch = reviewColor.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+),\s*(\d*\.?\d+)\)$/);
+        let hexColor = "#FFFF00"; //Fallback couleur jaune si la conversion échoue
+        if (rgbaMatch) {
+            const r = parseInt(rgbaMatch[1]).toString(16).padStart(2, '0');
+            const g = parseInt(rgbaMatch[2]).toString(16).padStart(2, '0');
+            const b = parseInt(rgbaMatch[3]).toString(16).padStart(2, '0');
+            hexColor = `#${r}${g}${b}`;
+        }
+
+        //Vérifie si une popup existe déjà et la supprime si c'est le cas
+        const existingPopup = document.getElementById('colorPickerPopup');
+        if (existingPopup) {
+            existingPopup.remove();
+        }
+
+        //Crée la fenêtre popup
+        const popup = document.createElement('div');
+        popup.id = "colorPickerPopup";
+        /*popup.style.cssText = `
+        position: fixed;
+        z-index: 10002;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        padding: 20px;
+        background-color: white;
+        border: 1px solid #ccc;
+        box-shadow: 0px 0px 10px #ccc;
+    `;*/
+        popup.innerHTML = `
+          <h2 id="configPopupHeader">Couleur de la bordure des avis utiles<span id="closeColorPicker" style="float: right; cursor: pointer;">&times;</span></h2>
+        <input type="color" id="colorPicker" value="${hexColor}" style="width: 100%;">
+        <div class="button-container final-buttons">
+            <button class="full-width" id="saveColor">Enregistrer</button>
+            <button class="full-width" id="closeColor">Fermer</button>
+        </div>
+    `;
+
+        document.body.appendChild(popup);
+
+        //Ajoute des écouteurs d'événement pour les boutons
+        document.getElementById('saveColor').addEventListener('click', function() {
+            const selectedColor = document.getElementById('colorPicker').value;
+            //Convertir la couleur hexadécimale en RGBA pour la transparence
+            const r = parseInt(selectedColor.substr(1, 2), 16);
+            const g = parseInt(selectedColor.substr(3, 2), 16);
+            const b = parseInt(selectedColor.substr(5, 2), 16);
+            const rgbaColor = `rgba(${r}, ${g}, ${b}, 0.5)`;
+
+            //Stocker la couleur sélectionnée
+            localStorage.setItem('reviewColor', rgbaColor);
+            reviewColor = rgbaColor;
+            popup.remove();
+        });
+
+        document.getElementById('closeColor').addEventListener('click', function() {
+            popup.remove();
+        });
+        document.getElementById('closeColorPicker').addEventListener('click', function() {
+            popup.remove();
+        });
+    }
 
     //Création de la popup pour les raisons de refus
     function createEmailPopup() {
@@ -454,6 +633,228 @@
         }
     }
 
+    function deleteAllTemplates() {
+        localStorage.removeItem('review_templates');
+        alert('Tous les modèles ont été supprimés.');
+    }
+
+    //Supprimer les avis
+    function deleteAllReviews() {
+        Object.keys(localStorage).forEach(key => {
+            if (key.startsWith('review_')) {
+                localStorage.removeItem(key);
+            }
+        });
+    }
+
+    //Fonction pour recharger les boutons
+    function reloadButtons() {
+        //Supprime les boutons existants
+        document.querySelectorAll('.custom-button-container').forEach(container => container.remove());
+        //Ajoute les boutons à nouveau
+        const submitButtonArea =
+              document.querySelector(selectorButtons) ||
+              document.querySelector(selectorButtonsOld);
+        if (submitButtonArea) {
+            addButtons(submitButtonArea);
+        }
+    }
+
+    //Fonction pour sauvegarder un nouveau modèle ou écraser un existant
+    function saveTemplate() {
+        const name = prompt("Entrez un nom pour ce modèle :");
+        if (!name) {
+            return alert('Le nom du modèle ne peut pas être vide.');
+        }
+        //Si null ou undefined, on utilise selectorTitleOld
+        const titleElement = document.getElementById(selectorTitle)
+        || document.getElementById(selectorTitleOld);
+
+        const reviewElement = document.getElementById(selectorReview)
+        || document.getElementById(selectorReviewOld);
+
+        //On vérifie l'existence de titleElement avant de l'utiliser
+        if (titleElement) {
+            var title = titleElement.value;
+        }
+
+        if (reviewElement) {
+            var review = reviewElement.value;
+        }
+
+        let savedTemplates = JSON.parse(localStorage.getItem('review_templates')) || [];
+
+        const existingIndex = savedTemplates.findIndex(template => template.name === name);
+
+        if (existingIndex !== -1) {
+            //Confirmer l'écrasement si le nom du modèle existe déjà
+            if (confirm(`Le modèle "${name}" existe déjà. Voulez-vous le remplacer ?`)) {
+                savedTemplates[existingIndex] = { name, title, review };
+            }
+        } else {
+            //Ajouter un nouveau modèle
+            savedTemplates.push({ name, title, review });
+        }
+
+        localStorage.setItem('review_templates', JSON.stringify(savedTemplates));
+        alert(`Le modèle "${name}" a été sauvegardé.`);
+        reloadButtons();
+    }
+
+    //Fonction pour supprimer un modèle
+    function deleteTemplate(index) {
+        let savedTemplates = JSON.parse(localStorage.getItem('review_templates')) || [];
+        if (savedTemplates[index]) {
+            if (confirm(`Voulez-vous vraiment supprimer le modèle "${savedTemplates[index].name}" ?`)) {
+                savedTemplates.splice(index, 1);
+                localStorage.setItem('review_templates', JSON.stringify(savedTemplates));
+                reloadButtons(); //Actualise les boutons et la liste de sélection
+            }
+        }
+    }
+
+    //Ajoute un seul bouton au conteneur spécifié avec une classe optionnelle pour le style
+    function addButton(text, onClickFunction, container, className = '') {
+        const button = document.createElement('button');
+        button.textContent = text;
+        button.className = 'a-button a-button-normal a-button-primary custom-button ' + className;
+        button.addEventListener('click', function() {
+            onClickFunction.call(this);
+        });
+        container.appendChild(button);
+        return button;
+    }
+
+    //Fonction pour utiliser un modèle spécifique
+    function useTemplate(index) {
+        const savedTemplates = JSON.parse(localStorage.getItem('review_templates')) || [];
+        const template = savedTemplates[index];
+        if (template) {
+            //Si null ou undefined, on utilise selectorTitleOld
+            const titleElement = document.getElementById(selectorTitle)
+            || document.getElementById(selectorTitleOld);
+
+            const reviewElement = document.getElementById(selectorReview)
+            || document.getElementById(selectorReviewOld);
+
+            //On vérifie l'existence de titleElement avant de l'utiliser
+            if (titleElement) {
+                titleElement.value = template.title;
+            }
+
+            if (reviewElement) {
+                reviewElement.value = template.review;
+            }
+            forceChangeReview();
+        } else {
+            alert('Aucun modèle sélectionné.');
+        }
+    }
+
+    //Ajout des différents boutons
+    function addButtons(targetElement) {
+        const buttonsContainer = document.createElement('div');
+        buttonsContainer.style.display = 'flex';
+        buttonsContainer.style.flexDirection = 'column'; //Les éléments seront empilés en colonne
+        buttonsContainer.style.alignItems = 'flex-start'; //Alignement des éléments à gauche
+        buttonsContainer.className = 'custom-button-container';
+
+        //Créer un conteneur pour la première ligne (menu déroulant)
+        const firstLineContainer = document.createElement('div');
+        firstLineContainer.className = 'first-line-container';
+        firstLineContainer.style.marginBottom = '15px'; //Ajout d'espace entre la première et la deuxième ligne
+
+        //Vérifie si review_template existe (ancienne version du modèle)
+        if (localStorage.getItem('review_template')) {
+            const savedTemplate = JSON.parse(localStorage.getItem('review_template'));
+            const { title, review } = savedTemplate;
+            //Utilise le titre de review_template comme nom du modèle ou "Ancien modèle" si vide
+            const name = title.trim() === "" ? "Ancien modèle" : title;
+            //Récupère les modèles existants
+            let savedTemplates = JSON.parse(localStorage.getItem('review_templates')) || [];
+            //Ajoute le nouveau modèle
+            savedTemplates.push({ name, title, review });
+            //Sauvegarde les modèles dans localStorage
+            localStorage.setItem('review_templates', JSON.stringify(savedTemplates));
+            //Supprime review_template
+            localStorage.removeItem('review_template');
+        }
+
+        //Ajout d'un champ de sélection pour les modèles
+        const selectTemplate = document.createElement('select');
+        selectTemplate.className = 'template-select';
+        selectTemplate.innerHTML = `<option value="">Sélectionner un modèle</option>`;
+        const savedTemplates = JSON.parse(localStorage.getItem('review_templates')) || [];
+        savedTemplates.forEach((template, index) => {
+            const option = document.createElement('option');
+            option.value = index;
+            option.textContent = template.name;
+            selectTemplate.appendChild(option);
+        });
+
+        firstLineContainer.appendChild(selectTemplate);
+        buttonsContainer.appendChild(firstLineContainer); //Ajouter la première ligne au conteneur principal
+
+        //Créer un conteneur pour la deuxième ligne (boutons liés aux modèles)
+        const secondLineContainer = document.createElement('div');
+        secondLineContainer.style.display = 'flex'; //Les boutons seront alignés horizontalement
+        secondLineContainer.style.gap = '10px'; //Espace entre les boutons
+        secondLineContainer.style.marginBottom = '15px'; //Ajout d'espace entre la deuxième et la troisième ligne
+        secondLineContainer.className = 'second-line-container';
+
+        //Bouton pour sauvegarder un modèle
+        addButton('Sauvegarder un nouveau modèle', saveTemplate, secondLineContainer, 'template-button');
+
+        //Bouton pour utiliser un modèle
+        const useTemplateButton = addButton('Utiliser modèle', () => useTemplate(selectTemplate.value), secondLineContainer, 'template-button');
+        useTemplateButton.style.display = 'none';
+
+        //Bouton pour supprimer un modèle
+        const deleteTemplateButton = addButton('Supprimer le modèle', () => deleteTemplate(selectTemplate.value), secondLineContainer, 'template-button');
+        deleteTemplateButton.style.display = 'none';
+
+        buttonsContainer.appendChild(secondLineContainer); //Ajouter la deuxième ligne au conteneur principal
+
+        //Créer un conteneur pour la troisième ligne (boutons d'avis)
+        const thirdLineContainer = document.createElement('div');
+        thirdLineContainer.style.display = 'flex'; //Les boutons seront alignés horizontalement
+        thirdLineContainer.style.gap = '10px'; //Espace entre les boutons
+        thirdLineContainer.className = 'third-line-container';
+
+        //Bouton pour sauvegarder l'avis
+        addButton('Sauvegarder l\'avis', saveReview, thirdLineContainer);
+
+        //Vérifie si un avis a été sauvegardé pour cet ASIN avant d'ajouter le bouton de restauration
+        const asin = getASIN();
+        if (localStorage.getItem(`review_${asin}`)) {
+            addButton('Restaurer l\'avis', restoreReview, thirdLineContainer);
+        }
+
+        buttonsContainer.appendChild(thirdLineContainer); //Ajouter la troisième ligne au conteneur principal
+
+        //Afficher/cacher les boutons "Utiliser modèle" et "Supprimer modèle" lorsque l'utilisateur sélectionne un modèle
+        selectTemplate.addEventListener('change', function () {
+            const selectedValue = selectTemplate.value;
+            if (selectedValue === "") {
+                useTemplateButton.style.display = 'none';
+                deleteTemplateButton.style.display = 'none';
+            } else {
+                useTemplateButton.style.removeProperty('display');
+                deleteTemplateButton.style.removeProperty('display');
+            }
+        });
+
+        //submitButtonArea.prepend(buttonsContainer);
+        // Ajouter les boutons à l'élément cible
+        targetElement.appendChild(buttonsContainer);
+        document.querySelectorAll('.custom-button').forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault(); // Empêche le comportement par défaut (comme un "submit")
+                event.stopPropagation(); // Empêche la propagation de l'événement
+            });
+        });
+    }
+
     //Crée la fenêtre popup de configuration avec la fonction de déplacement
     async function createConfigPopupRR() {
         if (document.getElementById('configPopupRR')) {
@@ -614,16 +1015,6 @@
 
     function initReviewRemember() {
 
-        const baseUrlPickme = "https://vinepick.me";
-
-        const selectorTitle = 'reviewTitle';
-        const selectorReview = 'reviewText';
-        const selectorButtons = '.in-context-ryp__form_fields_container-desktop, .in-context-ryp__form_fields_container-mweb';
-
-        const selectorTitleOld = 'scarface-review-title-label';
-        const selectorReviewOld = 'scarface-review-text-card-title';
-        const selectorButtonsOld = '.ryp__submit-button-card__card-frame';
-
         //Correction du mot sur la page
         var element = document.querySelector('#vvp-reviews-button--completed a.a-button-text');
 
@@ -656,109 +1047,6 @@
 
         //On initialise les infos pour la version mobile (ou non)
         var pageX = "Page X";
-
-        // Fonction pour détecter si l'utilisateur est sur mobile (à ne pas confondre avec le mode mobile activable manuellement
-        // dans les paramètres utilisateur)
-        // Note : si le mode PC est forcé sur mobile, cette fonction renverra toujours false, ce qui est le comportement attendu,
-        // car les traitements spécifiques au PC s'exécuteront, et la structure HTML liée sera présente
-        // => Cette fonction ne devrait pas poser de problème de fonctionnement si le mode PC est forcé sur mobile
-        function isMobile() {
-            return document.documentElement.classList.contains('a-mobile');
-        }
-
-        //Export des avis
-        function exportReviewsToCSV() {
-            let csvContent = "\uFEFF"; // BOM pour UTF-8
-
-            //Ajouter l'en-tête du CSV
-            csvContent += "Type;Nom;ASIN;Titre de l'avis;Contenu de l'avis\n";
-
-            //Exporter les modèles
-            let savedTemplates = JSON.parse(localStorage.getItem('review_templates')) || [];
-            savedTemplates.forEach(template => {
-                const { name, title, review } = template;
-                //Ajoute une ligne détaillée pour chaque modèle avec une colonne vide pour ASIN
-                csvContent += `Modèle;${name};;${title.replace(/;/g, ',')};${review.replace(/\n/g, '\\n')}\n`;
-            });
-
-            //Itérer sur les éléments de localStorage
-            Object.keys(localStorage).forEach(function(key) {
-                if (key.startsWith('review_') && key !== 'review_templates') {
-                    const reviewData = JSON.parse(localStorage.getItem(key));
-                    const asin = key.replace('review_', ''); // Extraire l'ASIN
-                    const title = reviewData.title.replace(/;/g, ','); // Remplacer les ";" par des ","
-                    const review = reviewData.review.replace(/\n/g, '\\n');
-
-                    //Ajouter la ligne pour les avis
-                    csvContent += `Avis;;${asin};${title};${review}\n`;
-                }
-            });
-
-            //Créer un objet Blob avec le contenu CSV en spécifiant le type MIME
-            var blob = new Blob([csvContent], {type: "text/csv;charset=utf-8;"});
-            var url = URL.createObjectURL(blob);
-
-            //Créer un lien pour télécharger le fichier
-            var link = document.createElement("a");
-            link.setAttribute("href", url);
-            link.setAttribute("download", "RR_backup.csv");
-            document.body.appendChild(link); // Nécessaire pour certains navigateurs
-
-            //Simuler un clic sur le lien pour déclencher le téléchargement
-            link.click();
-
-            //Nettoyer en supprimant le lien et en libérant l'objet URL
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-        }
-
-        //Import d'un fichier CSV
-        function readAndImportCSV(file) {
-            const reader = new FileReader();
-
-            reader.onload = function(event) {
-                const csv = event.target.result;
-                const lines = csv.split('\n');
-
-                for (let i = 1; i < lines.length; i++) {
-                    if (lines[i]) {
-                        const columns = lines[i].split(';');
-                        if (columns.length >= 4) { // On s'assure qu'il y a assez de colonnes
-                            const type = columns[0].trim();
-                            const name = columns[1].trim();
-                            const asin = columns[2].trim();
-                            const title = columns[3].trim();
-                            const review = columns[4].trim().replace(/\\n/g, '\n'); // Remplacer \\n par de vrais retours à la ligne
-
-                            if (type === "Avis") {
-                                //Sauvegarder l'avis
-                                localStorage.setItem(`review_${asin}`, JSON.stringify({ title, review }));
-                            } else if (type === "Modèle") {
-                                //Ajouter ou remplacer le modèle dans le tableau
-                                let savedTemplates = JSON.parse(localStorage.getItem('review_templates')) || [];
-
-                                //Vérifier si un modèle avec le même nom existe déjà
-                                const existingIndex = savedTemplates.findIndex(template => template.name === name);
-
-                                if (existingIndex !== -1) {
-                                    //Remplacer le modèle existant
-                                    savedTemplates[existingIndex] = { name, title, review };
-                                } else {
-                                    //Ajouter un nouveau modèle
-                                    savedTemplates.push({ name, title, review });
-                                }
-
-                                localStorage.setItem('review_templates', JSON.stringify(savedTemplates));
-                            }
-                        }
-                    }
-                }
-
-                alert('Importation terminée.');
-            };
-
-            reader.readAsText(file, 'UTF-8');
-        }
 
         //Trie des avis sur profil
         //Marquer une carte comme traitée
@@ -830,71 +1118,6 @@
             }
         }
 
-        function setHighlightColor() {
-            //Extraire les composantes r, g, b de la couleur actuelle
-            const rgbaMatch = reviewColor.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+),\s*(\d*\.?\d+)\)$/);
-            let hexColor = "#FFFF00"; //Fallback couleur jaune si la conversion échoue
-            if (rgbaMatch) {
-                const r = parseInt(rgbaMatch[1]).toString(16).padStart(2, '0');
-                const g = parseInt(rgbaMatch[2]).toString(16).padStart(2, '0');
-                const b = parseInt(rgbaMatch[3]).toString(16).padStart(2, '0');
-                hexColor = `#${r}${g}${b}`;
-            }
-
-            //Vérifie si une popup existe déjà et la supprime si c'est le cas
-            const existingPopup = document.getElementById('colorPickerPopup');
-            if (existingPopup) {
-                existingPopup.remove();
-            }
-
-            //Crée la fenêtre popup
-            const popup = document.createElement('div');
-            popup.id = "colorPickerPopup";
-            /*popup.style.cssText = `
-        position: fixed;
-        z-index: 10002;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
-        padding: 20px;
-        background-color: white;
-        border: 1px solid #ccc;
-        box-shadow: 0px 0px 10px #ccc;
-    `;*/
-            popup.innerHTML = `
-          <h2 id="configPopupHeader">Couleur de la bordure des avis utiles<span id="closeColorPicker" style="float: right; cursor: pointer;">&times;</span></h2>
-        <input type="color" id="colorPicker" value="${hexColor}" style="width: 100%;">
-        <div class="button-container final-buttons">
-            <button class="full-width" id="saveColor">Enregistrer</button>
-            <button class="full-width" id="closeColor">Fermer</button>
-        </div>
-    `;
-
-            document.body.appendChild(popup);
-
-            //Ajoute des écouteurs d'événement pour les boutons
-            document.getElementById('saveColor').addEventListener('click', function() {
-                const selectedColor = document.getElementById('colorPicker').value;
-                //Convertir la couleur hexadécimale en RGBA pour la transparence
-                const r = parseInt(selectedColor.substr(1, 2), 16);
-                const g = parseInt(selectedColor.substr(3, 2), 16);
-                const b = parseInt(selectedColor.substr(5, 2), 16);
-                const rgbaColor = `rgba(${r}, ${g}, ${b}, 0.5)`;
-
-                //Stocker la couleur sélectionnée
-                localStorage.setItem('reviewColor', rgbaColor);
-                reviewColor = rgbaColor;
-                popup.remove();
-            });
-
-            document.getElementById('closeColor').addEventListener('click', function() {
-                popup.remove();
-            });
-            document.getElementById('closeColorPicker').addEventListener('click', function() {
-                popup.remove();
-            });
-        }
-
         const asin = new URLSearchParams(window.location.search).get('asin');
 
         //Définition des styles pour les boutons
@@ -928,340 +1151,6 @@
         function getASIN() {
             const urlParams = new URLSearchParams(window.location.search);
             return urlParams.get('asin');
-        }
-
-        //Fonction pour recharger les boutons
-        function reloadButtons() {
-            //Supprime les boutons existants
-            document.querySelectorAll('.custom-button-container').forEach(container => container.remove());
-            //Ajoute les boutons à nouveau
-            const submitButtonArea =
-                  document.querySelector(selectorButtons) ||
-                  document.querySelector(selectorButtonsOld);
-            if (submitButtonArea) {
-                addButtons(submitButtonArea);
-            }
-        }
-
-        //Ajout des différents boutons
-        function addButtons(targetElement) {
-            const buttonsContainer = document.createElement('div');
-            buttonsContainer.style.display = 'flex';
-            buttonsContainer.style.flexDirection = 'column'; //Les éléments seront empilés en colonne
-            buttonsContainer.style.alignItems = 'flex-start'; //Alignement des éléments à gauche
-            buttonsContainer.className = 'custom-button-container';
-
-            //Créer un conteneur pour la première ligne (menu déroulant)
-            const firstLineContainer = document.createElement('div');
-            firstLineContainer.className = 'first-line-container';
-            firstLineContainer.style.marginBottom = '15px'; //Ajout d'espace entre la première et la deuxième ligne
-
-            //Vérifie si review_template existe (ancienne version du modèle)
-            if (localStorage.getItem('review_template')) {
-                const savedTemplate = JSON.parse(localStorage.getItem('review_template'));
-                const { title, review } = savedTemplate;
-                //Utilise le titre de review_template comme nom du modèle ou "Ancien modèle" si vide
-                const name = title.trim() === "" ? "Ancien modèle" : title;
-                //Récupère les modèles existants
-                let savedTemplates = JSON.parse(localStorage.getItem('review_templates')) || [];
-                //Ajoute le nouveau modèle
-                savedTemplates.push({ name, title, review });
-                //Sauvegarde les modèles dans localStorage
-                localStorage.setItem('review_templates', JSON.stringify(savedTemplates));
-                //Supprime review_template
-                localStorage.removeItem('review_template');
-            }
-
-            //Ajout d'un champ de sélection pour les modèles
-            const selectTemplate = document.createElement('select');
-            selectTemplate.className = 'template-select';
-            selectTemplate.innerHTML = `<option value="">Sélectionner un modèle</option>`;
-            const savedTemplates = JSON.parse(localStorage.getItem('review_templates')) || [];
-            savedTemplates.forEach((template, index) => {
-                const option = document.createElement('option');
-                option.value = index;
-                option.textContent = template.name;
-                selectTemplate.appendChild(option);
-            });
-
-            firstLineContainer.appendChild(selectTemplate);
-            buttonsContainer.appendChild(firstLineContainer); //Ajouter la première ligne au conteneur principal
-
-            //Créer un conteneur pour la deuxième ligne (boutons liés aux modèles)
-            const secondLineContainer = document.createElement('div');
-            secondLineContainer.style.display = 'flex'; //Les boutons seront alignés horizontalement
-            secondLineContainer.style.gap = '10px'; //Espace entre les boutons
-            secondLineContainer.style.marginBottom = '15px'; //Ajout d'espace entre la deuxième et la troisième ligne
-            secondLineContainer.className = 'second-line-container';
-
-            //Bouton pour sauvegarder un modèle
-            addButton('Sauvegarder un nouveau modèle', saveTemplate, secondLineContainer, 'template-button');
-
-            //Bouton pour utiliser un modèle
-            const useTemplateButton = addButton('Utiliser modèle', () => useTemplate(selectTemplate.value), secondLineContainer, 'template-button');
-            useTemplateButton.style.display = 'none';
-
-            //Bouton pour supprimer un modèle
-            const deleteTemplateButton = addButton('Supprimer le modèle', () => deleteTemplate(selectTemplate.value), secondLineContainer, 'template-button');
-            deleteTemplateButton.style.display = 'none';
-
-            buttonsContainer.appendChild(secondLineContainer); //Ajouter la deuxième ligne au conteneur principal
-
-            //Créer un conteneur pour la troisième ligne (boutons d'avis)
-            const thirdLineContainer = document.createElement('div');
-            thirdLineContainer.style.display = 'flex'; //Les boutons seront alignés horizontalement
-            thirdLineContainer.style.gap = '10px'; //Espace entre les boutons
-            thirdLineContainer.className = 'third-line-container';
-
-            //Bouton pour sauvegarder l'avis
-            addButton('Sauvegarder l\'avis', saveReview, thirdLineContainer);
-
-            //Vérifie si un avis a été sauvegardé pour cet ASIN avant d'ajouter le bouton de restauration
-            const asin = getASIN();
-            if (localStorage.getItem(`review_${asin}`)) {
-                addButton('Restaurer l\'avis', restoreReview, thirdLineContainer);
-            }
-
-            buttonsContainer.appendChild(thirdLineContainer); //Ajouter la troisième ligne au conteneur principal
-
-            //Afficher/cacher les boutons "Utiliser modèle" et "Supprimer modèle" lorsque l'utilisateur sélectionne un modèle
-            selectTemplate.addEventListener('change', function () {
-                const selectedValue = selectTemplate.value;
-                if (selectedValue === "") {
-                    useTemplateButton.style.display = 'none';
-                    deleteTemplateButton.style.display = 'none';
-                } else {
-                    useTemplateButton.style.removeProperty('display');
-                    deleteTemplateButton.style.removeProperty('display');
-                }
-            });
-
-            //submitButtonArea.prepend(buttonsContainer);
-            // Ajouter les boutons à l'élément cible
-            targetElement.appendChild(buttonsContainer);
-            document.querySelectorAll('.custom-button').forEach(button => {
-                button.addEventListener('click', function(event) {
-                    event.preventDefault(); // Empêche le comportement par défaut (comme un "submit")
-                    event.stopPropagation(); // Empêche la propagation de l'événement
-                });
-            });
-        }
-
-        //Ajoute un seul bouton au conteneur spécifié avec une classe optionnelle pour le style
-        function addButton(text, onClickFunction, container, className = '') {
-            const button = document.createElement('button');
-            button.textContent = text;
-            button.className = 'a-button a-button-normal a-button-primary custom-button ' + className;
-            button.addEventListener('click', function() {
-                onClickFunction.call(this);
-            });
-            container.appendChild(button);
-            return button;
-        }
-
-        //Fonction pour utiliser un modèle spécifique
-        function useTemplate(index) {
-            const savedTemplates = JSON.parse(localStorage.getItem('review_templates')) || [];
-            const template = savedTemplates[index];
-            if (template) {
-                //Si null ou undefined, on utilise selectorTitleOld
-                const titleElement = document.getElementById(selectorTitle)
-                || document.getElementById(selectorTitleOld);
-
-                const reviewElement = document.getElementById(selectorReview)
-                || document.getElementById(selectorReviewOld);
-
-                //On vérifie l'existence de titleElement avant de l'utiliser
-                if (titleElement) {
-                    titleElement.value = template.title;
-                }
-
-                if (reviewElement) {
-                    reviewElement.value = template.review;
-                }
-                forceChangeReview();
-            } else {
-                alert('Aucun modèle sélectionné.');
-            }
-        }
-
-        //Fonction pour sauvegarder un nouveau modèle ou écraser un existant
-        function saveTemplate() {
-            const name = prompt("Entrez un nom pour ce modèle :");
-            if (!name) {
-                return alert('Le nom du modèle ne peut pas être vide.');
-            }
-            //Si null ou undefined, on utilise selectorTitleOld
-            const titleElement = document.getElementById(selectorTitle)
-            || document.getElementById(selectorTitleOld);
-
-            const reviewElement = document.getElementById(selectorReview)
-            || document.getElementById(selectorReviewOld);
-
-            //On vérifie l'existence de titleElement avant de l'utiliser
-            if (titleElement) {
-                var title = titleElement.value;
-            }
-
-            if (reviewElement) {
-                var review = reviewElement.value;
-            }
-
-            let savedTemplates = JSON.parse(localStorage.getItem('review_templates')) || [];
-
-            const existingIndex = savedTemplates.findIndex(template => template.name === name);
-
-            if (existingIndex !== -1) {
-                //Confirmer l'écrasement si le nom du modèle existe déjà
-                if (confirm(`Le modèle "${name}" existe déjà. Voulez-vous le remplacer ?`)) {
-                    savedTemplates[existingIndex] = { name, title, review };
-                }
-            } else {
-                //Ajouter un nouveau modèle
-                savedTemplates.push({ name, title, review });
-            }
-
-            localStorage.setItem('review_templates', JSON.stringify(savedTemplates));
-            alert(`Le modèle "${name}" a été sauvegardé.`);
-            reloadButtons();
-        }
-
-        //Fonction pour supprimer un modèle
-        function deleteTemplate(index) {
-            let savedTemplates = JSON.parse(localStorage.getItem('review_templates')) || [];
-            if (savedTemplates[index]) {
-                if (confirm(`Voulez-vous vraiment supprimer le modèle "${savedTemplates[index].name}" ?`)) {
-                    savedTemplates.splice(index, 1);
-                    localStorage.setItem('review_templates', JSON.stringify(savedTemplates));
-                    reloadButtons(); //Actualise les boutons et la liste de sélection
-                }
-            }
-        }
-
-        function deleteAllTemplates() {
-            localStorage.removeItem('review_templates');
-            alert('Tous les modèles ont été supprimés.');
-        }
-
-        //Fonction pour restaurer un avis
-        function restoreReview() {
-            const asin = getASIN();
-            const savedReview = JSON.parse(localStorage.getItem(`review_${asin}`));
-            if (savedReview) {
-                //Si null ou undefined, on utilise selectorTitleOld
-                const titleElement = document.getElementById(selectorTitle)
-                || document.getElementById(selectorTitleOld);
-
-                const reviewElement = document.getElementById(selectorReview)
-                || document.getElementById(selectorReviewOld);
-
-                //On vérifie l'existence de titleElement avant de l'utiliser
-                if (titleElement) {
-                    titleElement.value = savedReview.title;
-                }
-
-                if (reviewElement) {
-                    reviewElement.value = savedReview.review;
-                }
-                forceChangeReview();
-            } else {
-                alert('Aucun avis sauvegardé pour ce produit.');
-            }
-        }
-
-        //Fonction pour sauvegarder l'avis
-        function saveReview(autoSave = false) {
-            //Si null ou undefined, on utilise selectorTitleOld
-            const titleElement = document.getElementById(selectorTitle)
-            || document.getElementById(selectorTitleOld);
-
-            const reviewElement = document.getElementById(selectorReview)
-            || document.getElementById(selectorReviewOld);
-
-            //On vérifie l'existence de titleElement avant de l'utiliser
-            if (titleElement) {
-                var title = titleElement.value;
-            }
-
-            if (reviewElement) {
-                var review = reviewElement.value;
-            }
-
-            const asin = getASIN();
-            localStorage.setItem(`review_${asin}`, JSON.stringify({ title, review }));
-            if (!autoSave) {
-                const saveButton = this;
-                const originalText = saveButton.textContent;
-                saveButton.textContent = 'Enregistré !';
-
-                setTimeout(() => {
-                    saveButton.textContent = originalText;
-                    saveButton.disabled = false;
-                    saveButton.style.backgroundColor = '';
-                    reloadButtons();
-                }, 2000);
-            }
-        }
-
-        //Supprimer les avis
-        function deleteAllReviews() {
-            Object.keys(localStorage).forEach(key => {
-                if (key.startsWith('review_')) {
-                    localStorage.removeItem(key);
-                }
-            });
-        }
-
-        //Fonctions pour les couleurs des avis
-        //Fonction pour changer la couleur de la barre en fonction du pourcentage
-        function changeColor() {
-            if (document.URL === "https://www.amazon.fr/vine/account") {
-                var progressBar = document.querySelector('#vvp-perc-reviewed-metric-display .animated-progress span');
-                var progressValue = parseFloat(progressBar.getAttribute('data-progress'));
-
-                var color = '';
-                var width = progressBar.style.width;
-                if (progressValue < 60) {
-                    color = 'red';
-                } else if (progressValue >= 60 && progressValue < 90) {
-                    color = 'orange';
-                } else {
-                    color = '#32cd32';
-                }
-
-                progressBar.style.backgroundColor = color;
-                progressBar.style.width = width;
-            }
-        }
-
-        //Griser le bouton Envoyer après avoir chargé un avis
-
-        //Fonction de nettoyage qui supprime l'intervalle, les écouteurs, le message, etc...
-        function cleanupPreviousRun() {
-            const data = window._fcrData;
-            if (!data) return;
-
-            //Supprimer l'intervalle s'il existe
-            if (data.hideInterval) {
-                clearInterval(data.hideInterval);
-                data.hideInterval = null;
-            }
-            //Supprimer les écouteurs sur les champs
-            if (data.reviewTextarea && data.onChangeReview) {
-                data.reviewTextarea.removeEventListener('input', data.onChangeReview);
-            }
-            if (data.reviewTitle && data.onChangeTitle) {
-                data.reviewTitle.removeEventListener('input', data.onChangeTitle);
-            }
-            //Supprimer le message rouge (s'il existe encore)
-            if (data.message && data.message.parentNode) {
-                data.message.parentNode.removeChild(data.message);
-            }
-            //Rétablir l'affichage par défaut du conteneur
-            if (data.boutonContainer) {
-                data.boutonContainer.style.removeProperty('display');
-            }
-            window._fcrData = null;
         }
 
         function forceChangeReview() {
@@ -1365,6 +1254,118 @@
 
             //Vérification initiale
             checkIfBothChanged();
+        }
+
+        //Fonction pour restaurer un avis
+        function restoreReview() {
+            const asin = getASIN();
+            const savedReview = JSON.parse(localStorage.getItem(`review_${asin}`));
+            if (savedReview) {
+                //Si null ou undefined, on utilise selectorTitleOld
+                const titleElement = document.getElementById(selectorTitle)
+                || document.getElementById(selectorTitleOld);
+
+                const reviewElement = document.getElementById(selectorReview)
+                || document.getElementById(selectorReviewOld);
+
+                //On vérifie l'existence de titleElement avant de l'utiliser
+                if (titleElement) {
+                    titleElement.value = savedReview.title;
+                }
+
+                if (reviewElement) {
+                    reviewElement.value = savedReview.review;
+                }
+                forceChangeReview();
+            } else {
+                alert('Aucun avis sauvegardé pour ce produit.');
+            }
+        }
+
+        //Fonction pour sauvegarder l'avis
+        function saveReview(autoSave = false) {
+            //Si null ou undefined, on utilise selectorTitleOld
+            const titleElement = document.getElementById(selectorTitle)
+            || document.getElementById(selectorTitleOld);
+
+            const reviewElement = document.getElementById(selectorReview)
+            || document.getElementById(selectorReviewOld);
+
+            //On vérifie l'existence de titleElement avant de l'utiliser
+            if (titleElement) {
+                var title = titleElement.value;
+            }
+
+            if (reviewElement) {
+                var review = reviewElement.value;
+            }
+
+            const asin = getASIN();
+            localStorage.setItem(`review_${asin}`, JSON.stringify({ title, review }));
+            if (!autoSave) {
+                const saveButton = this;
+                const originalText = saveButton.textContent;
+                saveButton.textContent = 'Enregistré !';
+
+                setTimeout(() => {
+                    saveButton.textContent = originalText;
+                    saveButton.disabled = false;
+                    saveButton.style.backgroundColor = '';
+                    reloadButtons();
+                }, 2000);
+            }
+        }
+
+        //Fonctions pour les couleurs des avis
+        //Fonction pour changer la couleur de la barre en fonction du pourcentage
+        function changeColor() {
+            if (document.URL === "https://www.amazon.fr/vine/account") {
+                var progressBar = document.querySelector('#vvp-perc-reviewed-metric-display .animated-progress span');
+                var progressValue = parseFloat(progressBar.getAttribute('data-progress'));
+
+                var color = '';
+                var width = progressBar.style.width;
+                if (progressValue < 60) {
+                    color = 'red';
+                } else if (progressValue >= 60 && progressValue < 90) {
+                    color = 'orange';
+                } else {
+                    color = '#32cd32';
+                }
+
+                progressBar.style.backgroundColor = color;
+                progressBar.style.width = width;
+            }
+        }
+
+        //Griser le bouton Envoyer après avoir chargé un avis
+
+        //Fonction de nettoyage qui supprime l'intervalle, les écouteurs, le message, etc...
+        function cleanupPreviousRun() {
+            const data = window._fcrData;
+            if (!data) return;
+
+            //Supprimer l'intervalle s'il existe
+            if (data.hideInterval) {
+                clearInterval(data.hideInterval);
+                data.hideInterval = null;
+            }
+            //Supprimer les écouteurs sur les champs
+            if (data.reviewTextarea && data.onChangeReview) {
+                data.reviewTextarea.removeEventListener('input', data.onChangeReview);
+            }
+            if (data.reviewTitle && data.onChangeTitle) {
+                data.reviewTitle.removeEventListener('input', data.onChangeTitle);
+            }
+            //Supprimer le message rouge (s'il existe encore)
+            if (data.message && data.message.parentNode) {
+                data.message.parentNode.removeChild(data.message);
+            }
+            //Rétablir l'affichage par défaut du conteneur
+            if (data.boutonContainer) {
+                data.boutonContainer.style.removeProperty('display');
+            }
+            window._fcrData = null;
         }
 
         //Affiche la dernière mise a jour du profil
@@ -2241,7 +2242,6 @@ body {
         var enableDateFunction = localStorage.getItem('enableDateFunction');
         var enableReviewStatusFunction = localStorage.getItem('enableReviewStatusFunction');
         var enableColorFunction = localStorage.getItem('enableColorFunction');
-        var reviewColor = localStorage.getItem('reviewColor');
         var filterEnabled = localStorage.getItem('filterEnabled');
         var profilEnabled = localStorage.getItem('profilEnabled');
         //var footerEnabled = localStorage.getItem('footerEnabled');
