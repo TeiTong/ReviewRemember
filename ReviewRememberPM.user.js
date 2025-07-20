@@ -2352,7 +2352,6 @@ body {
                 localStorage.setItem(input.name, input.checked.toString());
             });
             //alert('Configuration sauvegardée.');
-            window.location.reload();
             document.getElementById('configPopupRR').remove();
         }
 
