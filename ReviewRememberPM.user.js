@@ -2864,7 +2864,6 @@ li.a-last a span.larr {      /* Cible le span larr dans les li a-last */
                 elem.style.display = 'none';
             }
         });
-        window.createConfigPopupRR = createConfigPopupRR;
     }
     var RREnabled = localStorage.getItem('RREnabled');
     if (RREnabled === null) {
@@ -2878,4 +2877,5 @@ li.a-last a span.larr {      /* Cible le span larr dans les li a-last */
             window.addEventListener('DOMContentLoaded', initReviewRemember);
         }
     }
+    window.createConfigPopupRR = createConfigPopupRR;
 })();
