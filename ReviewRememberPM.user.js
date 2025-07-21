@@ -4,25 +4,33 @@
 // @version      1.8.7
 // @description  Outils pour les avis Amazon (version PickMe)
 // @author       Créateur/Codeur principal : MegaMan / Codeur secondaire : Sulff
-// @match        https://www.amazon.fr/review/create-review*
-// @match        https://www.amazon.fr/reviews/edit-review*
-// @match        https://www.amazon.fr/vine/vine-reviews*
-// @match        https://www.amazon.fr/vine/account
-// @match        https://www.amazon.fr/gp/profile/*
-// @match        https://www.amazon.fr/vine/orders*
-// @match        https://www.amazon.fr/gp/profile/*
-// @match        https://www.amazon.fr/vine/resources
 // @icon         https://vinepick.me/img/RR-ICO-2.png
 // @updateURL    https://raw.githubusercontent.com/teitong/reviewremember/main/ReviewRememberPM.user.js
 // @downloadURL  https://raw.githubusercontent.com/teitong/reviewremember/main/ReviewRememberPM.user.js
 // @require      https://vinepick.me/scripts/heic2any.min.js
 // @grant        GM_registerMenuCommand
-// @run-at       document-end
 //==/UserScript==
 
 (function() {
 
     'use strict';
+
+    const url = window.location.href;
+
+    const isAmazonTargetPage = [
+        /^https:\/\/www\.amazon\.fr\/review\/create-review/,
+        /^https:\/\/www\.amazon\.fr\/reviews\/edit-review/,
+        /^https:\/\/www\.amazon\.fr\/vine\/vine-reviews/,
+        /^https:\/\/www\.amazon\.fr\/vine\/account$/,
+        /^https:\/\/www\.amazon\.fr\/gp\/profile\/[^\/]+$/,
+        /^https:\/\/www\.amazon\.fr\/vine\/orders/,
+        /^https:\/\/www\.amazon\.fr\/vine\/resources$/
+    ].some(pattern => pattern.test(url));
+
+    if (!isAmazonTargetPage) {
+        return;
+    }
+
     const baseUrlPickme = "https://vinepick.me";
 
     const selectorTitle = 'reviewTitle';
@@ -1097,7 +1105,6 @@
       ${createCheckbox('filterEnabled', 'Cacher les avis approuvés', 'Dans l\'onglet "Vérifiées" de vos avis, si l\'avis  est Approuvé, alors il est caché')}
       ${createCheckbox('lastUpdateEnabled', 'Afficher la date de la dernière modification du % d\'avis', 'Indique la date de la dernière modification du % des avis sur le compte')}
       ${createCheckbox('targetPercentageEnabled', 'Afficher le nombre d\'avis nécessaires pour atteindre un % cible', 'Affiche le nombre d\'avis qu\'il va être nécessaire de faire pour atteindre le % défini')}
-      ${createCheckbox('headerEnabled', 'Cacher totalement l\'entête de la page', 'Cache le haut de la page Amazon, celle avec la zone de recherche et les menus')}
       ${createCheckbox('pageEnabled', 'Affichage des pages en partie haute', 'En plus des pages de navigation en partie basse, ajoute également la navigation des pages en haut')}
       ${createCheckbox('emailEnabled', 'Génération automatique des emails', 'Permet de générer automatiquement des mails à destination du support vine pour faire retirer un produit de votre liste d\'avis. Attention, on ne peut générer un mail que si le produit a été vu au moins une fois dans la liste de l\'onglet "Commandes"')}
       ${createCheckbox('profilEnabled', 'Mise en avant des avis avec des votes utiles sur les profils Amazon','Surligne de la couleur définie les avis ayant un vote utile ou plus. Il est également mis en début de page. Le surlignage ne fonctionne pas si l\'avis possède des photos')}
@@ -1689,26 +1696,6 @@
             });
         }
 
-        //Suppression header
-        function hideHeader() {
-            var styleHeader = document.createElement('style');
-
-            styleHeader.textContent = `
-body {
-  padding-right: 0px !important;
-}
-
-#navbar-main, #nav-main, #skiplink {
-  display: none;
-}
-
-.amzn-ss-wrap {
-  display: none !important;
-}
-`
-            document.head.appendChild(styleHeader);
-        }
-
         //Ajoute les pages en partie haute
         function addPage() {
             //Sélection du contenu HTML du div source
@@ -2244,7 +2231,6 @@ body {
         var profilEnabled = localStorage.getItem('profilEnabled');
         //var footerEnabled = localStorage.getItem('footerEnabled');
         var footerEnabled = 'false';
-        var headerEnabled = localStorage.getItem('headerEnabled');
         var pageEnabled = localStorage.getItem('pageEnabled');
         var emailEnabled = localStorage.getItem('emailEnabled');
         var lastUpdateEnabled = localStorage.getItem('lastUpdateEnabled');
@@ -2285,11 +2271,6 @@ body {
         if (footerEnabled === null) {
             footerEnabled = 'false';
             localStorage.setItem('footerEnabled', footerEnabled);
-        }
-
-        if (headerEnabled === null) {
-            headerEnabled = 'false';
-            localStorage.setItem('headerEnabled', headerEnabled);
         }
 
         if (pageEnabled === null) {
@@ -2338,10 +2319,6 @@ body {
 
         if (filterEnabled === 'true') {
             masquerLignesApprouve();
-        }
-
-        if (headerEnabled === 'true') {
-            hideHeader();
         }
 
         if (pageEnabled === 'true') {
