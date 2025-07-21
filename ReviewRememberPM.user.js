@@ -15,22 +15,6 @@
 
     'use strict';
 
-    const url = window.location.href;
-
-    const isAmazonTargetPage = [
-        /^https:\/\/www\.amazon\.fr\/review\/create-review/,
-        /^https:\/\/www\.amazon\.fr\/reviews\/edit-review/,
-        /^https:\/\/www\.amazon\.fr\/vine\/vine-reviews/,
-        /^https:\/\/www\.amazon\.fr\/vine\/account$/,
-        /^https:\/\/www\.amazon\.fr\/gp\/profile\/[^\/]+$/,
-        /^https:\/\/www\.amazon\.fr\/vine\/orders/,
-        /^https:\/\/www\.amazon\.fr\/vine\/resources$/
-    ].some(pattern => pattern.test(url));
-
-    if (!isAmazonTargetPage) {
-        return;
-    }
-
     const baseUrlPickme = "https://vinepick.me";
 
     const selectorTitle = 'reviewTitle';
@@ -1230,6 +1214,22 @@
     //Ajouter la commande de menu "Paramètres"
     GM_registerMenuCommand("Paramètres ReviewRemember", createConfigPopupRR, "r");
     //End
+
+    const url = window.location.href;
+
+    const isAmazonTargetPage = [
+        /^https:\/\/www\.amazon\.fr\/review\/create-review/,
+        /^https:\/\/www\.amazon\.fr\/reviews\/edit-review/,
+        /^https:\/\/www\.amazon\.fr\/vine\/vine-reviews/,
+        /^https:\/\/www\.amazon\.fr\/vine\/account$/,
+        /^https:\/\/www\.amazon\.fr\/gp\/profile\/[^\/]+$/,
+        /^https:\/\/www\.amazon\.fr\/vine\/orders/,
+        /^https:\/\/www\.amazon\.fr\/vine\/resources$/
+    ].some(pattern => pattern.test(url));
+
+    if (!isAmazonTargetPage) {
+        return;
+    }
 
     function initReviewRemember() {
 
