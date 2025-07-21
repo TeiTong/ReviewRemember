@@ -1228,6 +1228,7 @@
     ].some(pattern => pattern.test(url));
 
     if (!isAmazonTargetPage) {
+        window.createConfigPopupRR = createConfigPopupRR;
         return;
     }
 
