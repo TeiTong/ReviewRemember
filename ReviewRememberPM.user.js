@@ -44,6 +44,12 @@
         return document.documentElement.classList.contains('a-mobile');
     }
 
+    //Fonction pour obtenir l'ASIN du produit à partir de l'URL
+    function getASIN() {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get('asin');
+    }
+
     //Export des avis
     function exportReviewsToCSV() {
         let csvContent = "\uFEFF"; // BOM pour UTF-8
@@ -713,6 +719,34 @@
         }
     }
 
+    //Fonction de nettoyage qui supprime l'intervalle, les écouteurs, le message, etc...
+    function cleanupPreviousRun() {
+        const data = window._fcrData;
+        if (!data) return;
+
+        //Supprimer l'intervalle s'il existe
+        if (data.hideInterval) {
+            clearInterval(data.hideInterval);
+            data.hideInterval = null;
+        }
+        //Supprimer les écouteurs sur les champs
+        if (data.reviewTextarea && data.onChangeReview) {
+            data.reviewTextarea.removeEventListener('input', data.onChangeReview);
+        }
+        if (data.reviewTitle && data.onChangeTitle) {
+            data.reviewTitle.removeEventListener('input', data.onChangeTitle);
+        }
+        //Supprimer le message rouge (s'il existe encore)
+        if (data.message && data.message.parentNode) {
+            data.message.parentNode.removeChild(data.message);
+        }
+        //Rétablir l'affichage par défaut du conteneur
+        if (data.boutonContainer) {
+            data.boutonContainer.style.removeProperty('display');
+        }
+        window._fcrData = null;
+    }
+
     //Ajoute un seul bouton au conteneur spécifié avec une classe optionnelle pour le style
     function addButton(text, onClickFunction, container, className = '') {
         const button = document.createElement('button');
@@ -723,6 +757,109 @@
         });
         container.appendChild(button);
         return button;
+    }
+
+    function forceChangeReview() {
+        //Si on a déjà lancé la fonction auparavant, on nettoie d'abord
+        if (window._fcrData) {
+            cleanupPreviousRun();
+        }
+
+        const reviewTextarea = document.getElementById(selectorReview);
+        const reviewTitle = document.getElementById(selectorTitle);
+        const boutonContainer = document.querySelector('.in-context-ryp__submit-button-frame-desktop');
+
+        if (!reviewTextarea || !reviewTitle || !boutonContainer) {
+            console.log("Impossible de trouver reviewTextarea, reviewTitle ou boutonContainer.");
+            return;
+        }
+
+        //On crée un objet où on stocke nos références
+        window._fcrData = {
+            reviewTextarea: reviewTextarea,
+            reviewTitle: reviewTitle,
+            boutonContainer: boutonContainer,
+            hideInterval: null,
+            message: null,
+            onChangeReview: null,
+            onChangeTitle: null,
+            hasRun: true
+        };
+
+        //Valeurs initiales
+        const initialReview = reviewTextarea.value;
+        const initialTitle = reviewTitle.value;
+
+        //Création du message
+        const message = document.createElement('p');
+        message.style.color = 'red';
+        message.style.fontWeight = 'bold';
+        message.style.marginTop = '8px';
+        message.style.marginBottom = '8px';
+
+        //On l'insère après le bouton
+        boutonContainer.insertAdjacentElement('afterend', message);
+        window._fcrData.message = message;
+
+        //On cache immédiatement le conteneur
+        boutonContainer.style.setProperty('display', 'none', 'important');
+
+        //Timer car Amazon garde pas la propriété none sinon
+        let hideInterval = setInterval(() => {
+            boutonContainer.style.setProperty('display', 'none', 'important');
+        }, 500);
+        window._fcrData.hideInterval = hideInterval;
+
+        let changedReview = false;
+        let changedTitle = false;
+
+        function checkIfBothChanged() {
+            //Si les deux champs ont été modifiés
+            if (changedReview && changedTitle) {
+                //On arrête le masquage
+                if (window._fcrData.hideInterval) {
+                    clearInterval(window._fcrData.hideInterval);
+                    window._fcrData.hideInterval = null;
+                }
+                boutonContainer.style.removeProperty('display');
+                message.textContent = "";
+
+                //On supprime les écouteurs
+                reviewTextarea.removeEventListener('input', onChangeReview);
+                reviewTitle.removeEventListener('input', onChangeTitle);
+            } else {
+                //On indique ce qu'il manque à modifier
+                const missing = [];
+                if (!changedReview) missing.push("votre avis");
+                if (!changedTitle) missing.push("le titre de l'avis");
+                message.textContent = "Pour envoyer l'avis, veuillez modifier : " + missing.join(" et ");
+            }
+        }
+
+        function onChangeReview() {
+            //S'il n'est pas encore modifié, on compare à la valeur initiale
+            if (!changedReview && reviewTextarea.value !== initialReview) {
+                changedReview = true;
+            }
+            checkIfBothChanged();
+        }
+
+        function onChangeTitle() {
+            if (!changedTitle && reviewTitle.value !== initialTitle) {
+                changedTitle = true;
+            }
+            checkIfBothChanged();
+        }
+
+        //On garde la référence pour pouvoir les enlever plus tard
+        window._fcrData.onChangeReview = onChangeReview;
+        window._fcrData.onChangeTitle = onChangeTitle;
+
+        reviewTextarea.addEventListener('input', onChangeReview);
+        reviewTitle.addEventListener('input', onChangeTitle);
+
+        //Vérification initiale
+        checkIfBothChanged();
     }
 
     //Fonction pour utiliser un modèle spécifique
@@ -821,8 +958,82 @@
         thirdLineContainer.style.gap = '10px'; //Espace entre les boutons
         thirdLineContainer.className = 'third-line-container';
 
+        //Fonction pour restaurer un avis
+        function restoreReview() {
+            const asin = getASIN();
+            const savedReview = JSON.parse(localStorage.getItem(`review_${asin}`));
+            if (savedReview) {
+                //Si null ou undefined, on utilise selectorTitleOld
+                const titleElement = document.getElementById(selectorTitle)
+                || document.getElementById(selectorTitleOld);
+
+                const reviewElement = document.getElementById(selectorReview)
+                || document.getElementById(selectorReviewOld);
+
+                //On vérifie l'existence de titleElement avant de l'utiliser
+                if (titleElement) {
+                    titleElement.value = savedReview.title;
+                }
+
+                if (reviewElement) {
+                    reviewElement.value = savedReview.review;
+                }
+                forceChangeReview();
+            } else {
+                alert('Aucun avis sauvegardé pour ce produit.');
+            }
+        }
+
+        //Fonction pour sauvegarder l'avis
+        function saveReview(autoSave = false) {
+            //Si null ou undefined, on utilise selectorTitleOld
+            const titleElement = document.getElementById(selectorTitle)
+            || document.getElementById(selectorTitleOld);
+
+            const reviewElement = document.getElementById(selectorReview)
+            || document.getElementById(selectorReviewOld);
+
+            //On vérifie l'existence de titleElement avant de l'utiliser
+            if (titleElement) {
+                var title = titleElement.value;
+            }
+
+            if (reviewElement) {
+                var review = reviewElement.value;
+            }
+
+            const asin = getASIN();
+            localStorage.setItem(`review_${asin}`, JSON.stringify({ title, review }));
+            if (!autoSave) {
+                const saveButton = this;
+                const originalText = saveButton.textContent;
+                saveButton.textContent = 'Enregistré !';
+
+                setTimeout(() => {
+                    saveButton.textContent = originalText;
+                    saveButton.disabled = false;
+                    saveButton.style.backgroundColor = '';
+                    reloadButtons();
+                }, 2000);
+            }
+        }
+
         //Bouton pour sauvegarder l'avis
         addButton('Sauvegarder l\'avis', saveReview, thirdLineContainer);
+
+        function autoSaveReview() {
+            window.addEventListener('load', function() {
+                // Sélectionner le bouton à l'aide du nouveau sélecteur
+                var button = document.querySelector('div.a-section.in-context-ryp__submit-button-frame-desktop input.a-button-input');
+
+                // Vérifier si le bouton existe avant d'ajouter l'écouteur d'événements
+                if (button) {
+                    button.addEventListener('click', function() {
+                        saveReview(true);
+                    });
+                }
+            });
+        }
 
         //Vérifie si un avis a été sauvegardé pour cet ASIN avant d'ajouter le bouton de restauration
         const asin = getASIN();
@@ -1147,175 +1358,6 @@
         styleSheet.innerText = styles;
         document.head.appendChild(styleSheet);
 
-        //Fonction pour obtenir l'ASIN du produit à partir de l'URL
-        function getASIN() {
-            const urlParams = new URLSearchParams(window.location.search);
-            return urlParams.get('asin');
-        }
-
-        function forceChangeReview() {
-            //Si on a déjà lancé la fonction auparavant, on nettoie d'abord
-            if (window._fcrData) {
-                cleanupPreviousRun();
-            }
-
-            const reviewTextarea = document.getElementById(selectorReview);
-            const reviewTitle = document.getElementById(selectorTitle);
-            const boutonContainer = document.querySelector('.in-context-ryp__submit-button-frame-desktop');
-
-            if (!reviewTextarea || !reviewTitle || !boutonContainer) {
-                console.log("Impossible de trouver reviewTextarea, reviewTitle ou boutonContainer.");
-                return;
-            }
-
-            //On crée un objet où on stocke nos références
-            window._fcrData = {
-                reviewTextarea: reviewTextarea,
-                reviewTitle: reviewTitle,
-                boutonContainer: boutonContainer,
-                hideInterval: null,
-                message: null,
-                onChangeReview: null,
-                onChangeTitle: null,
-                hasRun: true
-            };
-
-            //Valeurs initiales
-            const initialReview = reviewTextarea.value;
-            const initialTitle = reviewTitle.value;
-
-            //Création du message
-            const message = document.createElement('p');
-            message.style.color = 'red';
-            message.style.fontWeight = 'bold';
-            message.style.marginTop = '8px';
-            message.style.marginBottom = '8px';
-
-            //On l'insère après le bouton
-            boutonContainer.insertAdjacentElement('afterend', message);
-            window._fcrData.message = message;
-
-            //On cache immédiatement le conteneur
-            boutonContainer.style.setProperty('display', 'none', 'important');
-
-            //Timer car Amazon garde pas la propriété none sinon
-            let hideInterval = setInterval(() => {
-                boutonContainer.style.setProperty('display', 'none', 'important');
-            }, 500);
-            window._fcrData.hideInterval = hideInterval;
-
-            let changedReview = false;
-            let changedTitle = false;
-
-            function checkIfBothChanged() {
-                //Si les deux champs ont été modifiés
-                if (changedReview && changedTitle) {
-                    //On arrête le masquage
-                    if (window._fcrData.hideInterval) {
-                        clearInterval(window._fcrData.hideInterval);
-                        window._fcrData.hideInterval = null;
-                    }
-                    boutonContainer.style.removeProperty('display');
-                    message.textContent = "";
-
-                    //On supprime les écouteurs
-                    reviewTextarea.removeEventListener('input', onChangeReview);
-                    reviewTitle.removeEventListener('input', onChangeTitle);
-                } else {
-                    //On indique ce qu'il manque à modifier
-                    const missing = [];
-                    if (!changedReview) missing.push("votre avis");
-                    if (!changedTitle) missing.push("le titre de l'avis");
-                    message.textContent = "Pour envoyer l'avis, veuillez modifier : " + missing.join(" et ");
-                }
-            }
-
-            function onChangeReview() {
-                //S'il n'est pas encore modifié, on compare à la valeur initiale
-                if (!changedReview && reviewTextarea.value !== initialReview) {
-                    changedReview = true;
-                }
-                checkIfBothChanged();
-            }
-
-            function onChangeTitle() {
-                if (!changedTitle && reviewTitle.value !== initialTitle) {
-                    changedTitle = true;
-                }
-                checkIfBothChanged();
-            }
-
-            //On garde la référence pour pouvoir les enlever plus tard
-            window._fcrData.onChangeReview = onChangeReview;
-            window._fcrData.onChangeTitle = onChangeTitle;
-
-            reviewTextarea.addEventListener('input', onChangeReview);
-            reviewTitle.addEventListener('input', onChangeTitle);
-
-            //Vérification initiale
-            checkIfBothChanged();
-        }
-
-        //Fonction pour restaurer un avis
-        function restoreReview() {
-            const asin = getASIN();
-            const savedReview = JSON.parse(localStorage.getItem(`review_${asin}`));
-            if (savedReview) {
-                //Si null ou undefined, on utilise selectorTitleOld
-                const titleElement = document.getElementById(selectorTitle)
-                || document.getElementById(selectorTitleOld);
-
-                const reviewElement = document.getElementById(selectorReview)
-                || document.getElementById(selectorReviewOld);
-
-                //On vérifie l'existence de titleElement avant de l'utiliser
-                if (titleElement) {
-                    titleElement.value = savedReview.title;
-                }
-
-                if (reviewElement) {
-                    reviewElement.value = savedReview.review;
-                }
-                forceChangeReview();
-            } else {
-                alert('Aucun avis sauvegardé pour ce produit.');
-            }
-        }
-
-        //Fonction pour sauvegarder l'avis
-        function saveReview(autoSave = false) {
-            //Si null ou undefined, on utilise selectorTitleOld
-            const titleElement = document.getElementById(selectorTitle)
-            || document.getElementById(selectorTitleOld);
-
-            const reviewElement = document.getElementById(selectorReview)
-            || document.getElementById(selectorReviewOld);
-
-            //On vérifie l'existence de titleElement avant de l'utiliser
-            if (titleElement) {
-                var title = titleElement.value;
-            }
-
-            if (reviewElement) {
-                var review = reviewElement.value;
-            }
-
-            const asin = getASIN();
-            localStorage.setItem(`review_${asin}`, JSON.stringify({ title, review }));
-            if (!autoSave) {
-                const saveButton = this;
-                const originalText = saveButton.textContent;
-                saveButton.textContent = 'Enregistré !';
-
-                setTimeout(() => {
-                    saveButton.textContent = originalText;
-                    saveButton.disabled = false;
-                    saveButton.style.backgroundColor = '';
-                    reloadButtons();
-                }, 2000);
-            }
-        }
-
         //Fonctions pour les couleurs des avis
         //Fonction pour changer la couleur de la barre en fonction du pourcentage
         function changeColor() {
@@ -1336,36 +1378,6 @@
                 progressBar.style.backgroundColor = color;
                 progressBar.style.width = width;
             }
-        }
-
-        //Griser le bouton Envoyer après avoir chargé un avis
-
-        //Fonction de nettoyage qui supprime l'intervalle, les écouteurs, le message, etc...
-        function cleanupPreviousRun() {
-            const data = window._fcrData;
-            if (!data) return;
-
-            //Supprimer l'intervalle s'il existe
-            if (data.hideInterval) {
-                clearInterval(data.hideInterval);
-                data.hideInterval = null;
-            }
-            //Supprimer les écouteurs sur les champs
-            if (data.reviewTextarea && data.onChangeReview) {
-                data.reviewTextarea.removeEventListener('input', data.onChangeReview);
-            }
-            if (data.reviewTitle && data.onChangeTitle) {
-                data.reviewTitle.removeEventListener('input', data.onChangeTitle);
-            }
-            //Supprimer le message rouge (s'il existe encore)
-            if (data.message && data.message.parentNode) {
-                data.message.parentNode.removeChild(data.message);
-            }
-            //Rétablir l'affichage par défaut du conteneur
-            if (data.boutonContainer) {
-                data.boutonContainer.style.removeProperty('display');
-            }
-            window._fcrData = null;
         }
 
         //Affiche la dernière mise a jour du profil
@@ -2224,6 +2236,40 @@ body {
             }
         }
 
+        //Fonction pour sauvegarder l'avis (doublon avec celle plus haut)
+        function saveReview(autoSave = false) {
+            //Si null ou undefined, on utilise selectorTitleOld
+            const titleElement = document.getElementById(selectorTitle)
+            || document.getElementById(selectorTitleOld);
+
+            const reviewElement = document.getElementById(selectorReview)
+            || document.getElementById(selectorReviewOld);
+
+            //On vérifie l'existence de titleElement avant de l'utiliser
+            if (titleElement) {
+                var title = titleElement.value;
+            }
+
+            if (reviewElement) {
+                var review = reviewElement.value;
+            }
+
+            const asin = getASIN();
+            localStorage.setItem(`review_${asin}`, JSON.stringify({ title, review }));
+            if (!autoSave) {
+                const saveButton = this;
+                const originalText = saveButton.textContent;
+                saveButton.textContent = 'Enregistré !';
+
+                setTimeout(() => {
+                    saveButton.textContent = originalText;
+                    saveButton.disabled = false;
+                    saveButton.style.backgroundColor = '';
+                    reloadButtons();
+                }, 2000);
+            }
+        }
+
         function autoSaveReview() {
             window.addEventListener('load', function() {
                 // Sélectionner le bouton à l'aide du nouveau sélecteur
@@ -2474,7 +2520,7 @@ body {
 
                             isProcessingUpload = true;
                             uploadNext();
-                        }  else if (files.length === 1) {
+                        } else if (files.length === 1) {
                             const dt = new DataTransfer();
                             dt.items.add(files[0]);
                             isProcessingUpload = true;
