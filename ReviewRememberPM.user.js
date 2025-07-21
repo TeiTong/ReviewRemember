@@ -888,6 +888,80 @@
         }
     }
 
+    //Fonction pour restaurer un avis
+    function restoreReview() {
+        const asin = getASIN();
+        const savedReview = JSON.parse(localStorage.getItem(`review_${asin}`));
+        if (savedReview) {
+            //Si null ou undefined, on utilise selectorTitleOld
+            const titleElement = document.getElementById(selectorTitle)
+            || document.getElementById(selectorTitleOld);
+
+            const reviewElement = document.getElementById(selectorReview)
+            || document.getElementById(selectorReviewOld);
+
+            //On vérifie l'existence de titleElement avant de l'utiliser
+            if (titleElement) {
+                titleElement.value = savedReview.title;
+            }
+
+            if (reviewElement) {
+                reviewElement.value = savedReview.review;
+            }
+            forceChangeReview();
+        } else {
+            alert('Aucun avis sauvegardé pour ce produit.');
+        }
+    }
+
+    //Fonction pour sauvegarder l'avis
+    function saveReview(autoSave = false) {
+        //Si null ou undefined, on utilise selectorTitleOld
+        const titleElement = document.getElementById(selectorTitle)
+        || document.getElementById(selectorTitleOld);
+
+        const reviewElement = document.getElementById(selectorReview)
+        || document.getElementById(selectorReviewOld);
+
+        //On vérifie l'existence de titleElement avant de l'utiliser
+        if (titleElement) {
+            var title = titleElement.value;
+        }
+
+        if (reviewElement) {
+            var review = reviewElement.value;
+        }
+
+        const asin = getASIN();
+        localStorage.setItem(`review_${asin}`, JSON.stringify({ title, review }));
+        if (!autoSave) {
+            const saveButton = this;
+            const originalText = saveButton.textContent;
+            saveButton.textContent = 'Enregistré !';
+
+            setTimeout(() => {
+                saveButton.textContent = originalText;
+                saveButton.disabled = false;
+                saveButton.style.backgroundColor = '';
+                reloadButtons();
+            }, 2000);
+        }
+    }
+
+    function autoSaveReview() {
+        window.addEventListener('load', function() {
+            // Sélectionner le bouton à l'aide du nouveau sélecteur
+            var button = document.querySelector('div.a-section.in-context-ryp__submit-button-frame-desktop input.a-button-input');
+
+            // Vérifier si le bouton existe avant d'ajouter l'écouteur d'événements
+            if (button) {
+                button.addEventListener('click', function() {
+                    saveReview(true);
+                });
+            }
+        });
+    }
+
     //Ajout des différents boutons
     function addButtons(targetElement) {
         const buttonsContainer = document.createElement('div');
@@ -958,82 +1032,8 @@
         thirdLineContainer.style.gap = '10px'; //Espace entre les boutons
         thirdLineContainer.className = 'third-line-container';
 
-        //Fonction pour restaurer un avis
-        function restoreReview() {
-            const asin = getASIN();
-            const savedReview = JSON.parse(localStorage.getItem(`review_${asin}`));
-            if (savedReview) {
-                //Si null ou undefined, on utilise selectorTitleOld
-                const titleElement = document.getElementById(selectorTitle)
-                || document.getElementById(selectorTitleOld);
-
-                const reviewElement = document.getElementById(selectorReview)
-                || document.getElementById(selectorReviewOld);
-
-                //On vérifie l'existence de titleElement avant de l'utiliser
-                if (titleElement) {
-                    titleElement.value = savedReview.title;
-                }
-
-                if (reviewElement) {
-                    reviewElement.value = savedReview.review;
-                }
-                forceChangeReview();
-            } else {
-                alert('Aucun avis sauvegardé pour ce produit.');
-            }
-        }
-
-        //Fonction pour sauvegarder l'avis
-        function saveReview(autoSave = false) {
-            //Si null ou undefined, on utilise selectorTitleOld
-            const titleElement = document.getElementById(selectorTitle)
-            || document.getElementById(selectorTitleOld);
-
-            const reviewElement = document.getElementById(selectorReview)
-            || document.getElementById(selectorReviewOld);
-
-            //On vérifie l'existence de titleElement avant de l'utiliser
-            if (titleElement) {
-                var title = titleElement.value;
-            }
-
-            if (reviewElement) {
-                var review = reviewElement.value;
-            }
-
-            const asin = getASIN();
-            localStorage.setItem(`review_${asin}`, JSON.stringify({ title, review }));
-            if (!autoSave) {
-                const saveButton = this;
-                const originalText = saveButton.textContent;
-                saveButton.textContent = 'Enregistré !';
-
-                setTimeout(() => {
-                    saveButton.textContent = originalText;
-                    saveButton.disabled = false;
-                    saveButton.style.backgroundColor = '';
-                    reloadButtons();
-                }, 2000);
-            }
-        }
-
         //Bouton pour sauvegarder l'avis
         addButton('Sauvegarder l\'avis', saveReview, thirdLineContainer);
-
-        function autoSaveReview() {
-            window.addEventListener('load', function() {
-                // Sélectionner le bouton à l'aide du nouveau sélecteur
-                var button = document.querySelector('div.a-section.in-context-ryp__submit-button-frame-desktop input.a-button-input');
-
-                // Vérifier si le bouton existe avant d'ajouter l'écouteur d'événements
-                if (button) {
-                    button.addEventListener('click', function() {
-                        saveReview(true);
-                    });
-                }
-            });
-        }
 
         //Vérifie si un avis a été sauvegardé pour cet ASIN avant d'ajouter le bouton de restauration
         const asin = getASIN();
@@ -2234,54 +2234,6 @@ body {
                 //window.location.reload();
                 return emailText;
             }
-        }
-
-        //Fonction pour sauvegarder l'avis (doublon avec celle plus haut)
-        function saveReview(autoSave = false) {
-            //Si null ou undefined, on utilise selectorTitleOld
-            const titleElement = document.getElementById(selectorTitle)
-            || document.getElementById(selectorTitleOld);
-
-            const reviewElement = document.getElementById(selectorReview)
-            || document.getElementById(selectorReviewOld);
-
-            //On vérifie l'existence de titleElement avant de l'utiliser
-            if (titleElement) {
-                var title = titleElement.value;
-            }
-
-            if (reviewElement) {
-                var review = reviewElement.value;
-            }
-
-            const asin = getASIN();
-            localStorage.setItem(`review_${asin}`, JSON.stringify({ title, review }));
-            if (!autoSave) {
-                const saveButton = this;
-                const originalText = saveButton.textContent;
-                saveButton.textContent = 'Enregistré !';
-
-                setTimeout(() => {
-                    saveButton.textContent = originalText;
-                    saveButton.disabled = false;
-                    saveButton.style.backgroundColor = '';
-                    reloadButtons();
-                }, 2000);
-            }
-        }
-
-        function autoSaveReview() {
-            window.addEventListener('load', function() {
-                // Sélectionner le bouton à l'aide du nouveau sélecteur
-                var button = document.querySelector('div.a-section.in-context-ryp__submit-button-frame-desktop input.a-button-input');
-
-                // Vérifier si le bouton existe avant d'ajouter l'écouteur d'événements
-                if (button) {
-                    button.addEventListener('click', function() {
-                        saveReview(true);
-                    });
-                }
-            });
         }
 
         //localStorage.removeItem('enableDateFunction');
