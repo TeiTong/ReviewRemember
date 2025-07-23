@@ -2394,8 +2394,8 @@
                             progressDiv = document.createElement('div');
                             progressDiv.id = 'rr-upload-progress';
                             progressDiv.style.position = 'fixed';
-                            progressDiv.style.bottom = '10px';
-                            progressDiv.style.right = '10px';
+                            progressDiv.style.bottom = '50%';
+                            progressDiv.style.right = '50%';
                             progressDiv.style.background = 'rgba(0,0,0,0.7)';
                             progressDiv.style.color = '#fff';
                             progressDiv.style.padding = '10px';
