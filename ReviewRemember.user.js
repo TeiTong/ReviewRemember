@@ -1,7 +1,7 @@
 //==UserScript==
 // @name         ReviewRemember
 // @namespace    http://tampermonkey.net/
-// @version      1.8.6
+// @version      1.8.7
 // @description  Outils pour les avis Amazon
 // @author       Créateur/Codeur principal : MegaMan / Codeur secondaire : Sulff
 // @match        https://www.amazon.fr/review/create-review*
@@ -21,6 +21,11 @@
 
 (function() {
     'use strict';
+	
+    //Test si on utilise RR en standalone
+    if (Math.random() < 0.1) {
+        localStorage.setItem('useRR', '1');
+    }
 
     var version = GM_info.script.version;
 
