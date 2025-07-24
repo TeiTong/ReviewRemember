@@ -1,7 +1,7 @@
 //==UserScript==
 // @name         ReviewRememberPM
 // @namespace    http://tampermonkey.net/
-// @version      1.8.7
+// @version      1.9
 // @description  Outils pour les avis Amazon (version PickMe)
 // @author       Créateur/Codeur principal : MegaMan / Codeur secondaire : Sulff
 // @icon         https://vinepick.me/img/RR-ICO-2.png
@@ -14,6 +14,9 @@
 (function() {
 
     'use strict';
+
+    //A retirer plus tard, pour ne plus avoir l'alerte de RR à mettre à jour
+    localStorage.setItem('useRR', '0');
 
     const baseUrlPickme = "https://vinepick.me";
 
@@ -1219,7 +1222,7 @@
 
     const isAmazonTargetPage = [
         /^https:\/\/www\.amazon\.fr\/review\/create-review/,
-        /^https:\/\/www\.amazon\.fr\/reviews\/edit-review/,
+        /^https:\/\/www\.amazon\.fr\/review\/edit-review/,
         /^https:\/\/www\.amazon\.fr\/vine\/vine-reviews/,
         /^https:\/\/www\.amazon\.fr\/vine\/account$/,
         /^https:\/\/www\.amazon\.fr\/gp\/profile\/[^\/]+$/,
