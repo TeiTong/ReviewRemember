@@ -50,26 +50,27 @@
         let csvContent = "\uFEFF"; // BOM pour UTF-8
 
         //Ajouter l'en-tête du CSV
-        csvContent += "Type;Nom;ASIN;Titre de l'avis;Contenu de l'avis\n";
+        csvContent += "Date;Type;Nom;ASIN;Titre de l'avis;Contenu de l'avis\n";
 
         //Exporter les modèles
         let savedTemplates = JSON.parse(localStorage.getItem('review_templates')) || [];
         savedTemplates.forEach(template => {
             const { name, title, review } = template;
             //Ajoute une ligne détaillée pour chaque modèle avec une colonne vide pour ASIN
-            csvContent += `Modèle;${name};;${title.replace(/;/g, ',')};${review.replace(/\n/g, '\\n')}\n`;
+            csvContent += `;Modèle;${name};;${title.replace(/;/g, ',')};${review.replace(/\n/g, '\\n')}\n`;
         });
 
         //Itérer sur les éléments de localStorage
         Object.keys(localStorage).forEach(function(key) {
             if (key.startsWith('review_') && key !== 'review_templates') {
                 const reviewData = JSON.parse(localStorage.getItem(key));
-                const asin = key.replace('review_', ''); // Extraire l'ASIN
-                const title = reviewData.title.replace(/;/g, ','); // Remplacer les ";" par des ","
+                const asin = key.replace('review_', ''); //Extraire l'ASIN
+                const title = reviewData.title.replace(/;/g, ','); //Remplacer les ";" par des ","
                 const review = reviewData.review.replace(/\n/g, '\\n');
 
                 //Ajouter la ligne pour les avis
-                csvContent += `Avis;;${asin};${title};${review}\n`;
+                const date = reviewData.date || '';
+                csvContent += `${date};Avis;;${asin};${title};${review}\n`;
             }
         });
 
@@ -80,8 +81,10 @@
         //Créer un lien pour télécharger le fichier
         var link = document.createElement("a");
         link.setAttribute("href", url);
-        link.setAttribute("download", "RR_backup.csv");
-        document.body.appendChild(link); // Nécessaire pour certains navigateurs
+        const now = new Date();
+        const formattedDate = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
+        link.setAttribute("download", `RR_backup_${formattedDate}.csv`);
+        document.body.appendChild(link); //Nécessaire pour certains navigateurs
 
         //Simuler un clic sur le lien pour déclencher le téléchargement
         link.click();
@@ -102,29 +105,25 @@
             for (let i = 1; i < lines.length; i++) {
                 if (lines[i]) {
                     const columns = lines[i].split(';');
-                    if (columns.length >= 4) { // On s'assure qu'il y a assez de colonnes
-                        const type = columns[0].trim();
-                        const name = columns[1].trim();
-                        const asin = columns[2].trim();
-                        const title = columns[3].trim();
-                        const review = columns[4].trim().replace(/\\n/g, '\n'); // Remplacer \\n par de vrais retours à la ligne
+                    if (columns.length >= 6) {
+                        const date = columns[0].trim();
+                        const type = columns[1].trim();
+                        const name = columns[2].trim();
+                        const asin = columns[3].trim();
+                        const title = columns[4].trim();
+                        const review = columns[5].trim().replace(/\\n/g, '\n');
 
                         if (type === "Avis") {
-                            //Sauvegarder l'avis
-                            localStorage.setItem(`review_${asin}`, JSON.stringify({ title, review }));
+                            localStorage.setItem(`review_${asin}`, JSON.stringify({ title, review, date }));
                         } else if (type === "Modèle") {
-                            //Ajouter ou remplacer le modèle dans le tableau
                             let savedTemplates = JSON.parse(localStorage.getItem('review_templates')) || [];
-
-                            //Vérifier si un modèle avec le même nom existe déjà
                             const existingIndex = savedTemplates.findIndex(template => template.name === name);
+                            const templateData = { name, title, review };
 
                             if (existingIndex !== -1) {
-                                //Remplacer le modèle existant
-                                savedTemplates[existingIndex] = { name, title, review };
+                                savedTemplates[existingIndex] = templateData;
                             } else {
-                                //Ajouter un nouveau modèle
-                                savedTemplates.push({ name, title, review });
+                                savedTemplates.push(templateData);
                             }
 
                             localStorage.setItem('review_templates', JSON.stringify(savedTemplates));
@@ -642,10 +641,11 @@
     //Supprimer les avis
     function deleteAllReviews() {
         Object.keys(localStorage).forEach(key => {
-            if (key.startsWith('review_')) {
+            if (key.startsWith('review_') && key !== 'review_templates') {
                 localStorage.removeItem(key);
             }
         });
+        alert('Tous les avis ont été supprimés.');
     }
 
     //Fonction pour recharger les boutons
@@ -928,7 +928,12 @@
         }
 
         const asin = getASIN();
-        localStorage.setItem(`review_${asin}`, JSON.stringify({ title, review }));
+        //Obtenir la date au format JJ/MM/AAAA
+        const now = new Date();
+        const date = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+
+        //Sauvegarde dans localStorage
+        localStorage.setItem(`review_${asin}`, JSON.stringify({ title, review, date }));
         if (!autoSave) {
             const saveButton = this;
             const originalText = saveButton.textContent;
