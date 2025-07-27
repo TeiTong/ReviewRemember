@@ -5,6 +5,7 @@
 // @description  Outils pour les avis Amazon (version PickMe)
 // @author       Créateur/Codeur principal : MegaMan / Codeur secondaire : Sulff
 // @icon         https://vinepick.me/img/RR-ICO-2.png
+// @match        https://www.amazon.fr/*
 // @updateURL    https://raw.githubusercontent.com/teitong/reviewremember/main/ReviewRememberPM.user.js
 // @downloadURL  https://raw.githubusercontent.com/teitong/reviewremember/main/ReviewRememberPM.user.js
 // @require      https://vinepick.me/scripts/heic2any.min.js
@@ -17,6 +18,8 @@
 
     //A retirer plus tard, pour ne plus avoir l'alerte de RR à mettre à jour
     localStorage.setItem('useRR', '0');
+
+    var versionRR = "1.9";
 
     const baseUrlPickme = "https://vinepick.me";
 
@@ -765,7 +768,7 @@
         const boutonContainer = document.querySelector('.in-context-ryp__submit-button-frame-desktop');
 
         if (!reviewTextarea || !reviewTitle || !boutonContainer) {
-            console.log("Impossible de trouver reviewTextarea, reviewTitle ou boutonContainer.");
+            console.log("[ReviewRemember] Impossible de trouver reviewTextarea, reviewTitle ou boutonContainer.");
             return;
         }
 
@@ -1056,7 +1059,7 @@
         });
 
         //submitButtonArea.prepend(buttonsContainer);
-        // Ajouter les boutons à l'élément cible
+        //Ajouter les boutons à l'élément cible
         targetElement.appendChild(buttonsContainer);
         document.querySelectorAll('.custom-button').forEach(button => {
             button.addEventListener('click', function(event) {
@@ -1074,7 +1077,11 @@
         const popup = document.createElement('div');
         popup.id = "configPopupRR";
         popup.innerHTML = `
-    <h2 id="configPopupHeader">Paramètres ReviewRemember<span id="closePopupRR" style="float: right; cursor: pointer;">&times;</span></h2>
+    <h2 id="configPopupHeader">
+      <span style="color: #0463d5;">Paramètres</span>
+      <span style="color: #1d820c;">ReviewRemember</span>
+      <span style="color: #0463d5;">v${versionRR}</span>
+      <span id="closePopupRR" style="float: right; cursor: pointer;">&times;</span></h2>
     <div style="text-align: center; margin-bottom: 20px;">
         <p id="links-container" style="text-align: center;">
             <a href="${baseUrlPickme}/wiki/doku.php?id=plugins:reviewremember" target="_blank">
@@ -2122,7 +2129,7 @@
                         window.location.reload();
                     }
                 }).catch(err => {
-                    console.error('Erreur lors de la copie :', err);
+                    console.error('[ReviewRemember] Erreur lors de la copie :', err);
                 });
             });
             //Réduction du padding sur `buttonText`
@@ -2145,7 +2152,7 @@
                 navigator.clipboard.writeText('vine-support@amazon.fr').then(() => {
                     alert('Email copié dans le presse-papiers');
                 }).catch(err => {
-                    console.error('Erreur lors de la copie :', err);
+                    console.error('[ReviewRemember] Erreur lors de la copie :', err);
                 });
             });
 
@@ -2424,7 +2431,7 @@
                                     const newName = f.name.replace(/\.(heic|heif)$/i, '.jpg');
                                     files[i] = new File([blob], newName, { type: 'image/jpeg' });
                                 } catch (err) {
-                                    console.error('Erreur de conversion HEIC', err);
+                                    console.error('[ReviewRemember] Erreur de conversion HEIC', err);
                                 }
                             }
                         }
