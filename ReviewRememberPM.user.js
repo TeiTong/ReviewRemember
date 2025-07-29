@@ -1170,18 +1170,22 @@
     function createCheckbox(name, label, explanation = null, disabled = false) {
         const isChecked = localStorage.getItem(name) === 'true' ? 'checked' : '';
         const isDisabled = disabled ? 'disabled' : '';
-        //Choisis la couleur ici. Options: 'black', 'white', 'gray'
-        const color = 'gray'; //Exemple: change cette valeur pour 'black', 'white', ou une autre couleur CSS valide
 
-        //Génération de l'ID unique pour le span d'aide
+        const color = 'gray';
         const helpSpanId = `help-span-${name}`;
 
-        //Icône d'aide avec gestionnaire d'événements attaché via addEventListener
-        const helpIcon = explanation ? `<span id="${helpSpanId}" style="text-decoration: none; cursor: help; margin-left: 4px; color: ${color}; font-size: 16px;">?</span>` : '';
-        const checkboxHtml = `<label class="${isDisabled ? 'disabled' : ''}">
-              <input type="checkbox" id="${name}" name="${name}" ${isChecked} ${isDisabled}>
-              ${label} ${helpIcon}
-          </label>`;
+        const helpIcon = explanation
+        ? `<span id="${helpSpanId}" style="cursor: help; color: ${color}; font-size: 16px;">?</span>`
+        : '';
+
+        const checkboxHtml = `<label class="${isDisabled ? 'disabled' : ''}" style="display: flex; align-items: flex-start; gap: 8px;">
+    <div style="flex: 1;">
+        <input type="checkbox" id="${name}" name="${name}" ${isChecked} ${isDisabled}>
+        ${label}
+    </div>
+    ${helpIcon ? `<div style="width: 20px; text-align: center;">${helpIcon}</div>` : ''}
+</label>`;
+
 
         //Attacher le gestionnaire d'événements après le rendu de l'HTML
         setTimeout(() => {
@@ -1723,7 +1727,7 @@
             ));
         }
 
-         function addPage() {
+        function addPage() {
             //Sélection du contenu HTML du div source
             const sourceElement = findPaginationBlock();
             //Vérifier si l'élément source existe
