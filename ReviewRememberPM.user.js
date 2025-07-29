@@ -1,10 +1,11 @@
 //==UserScript==
 // @name         ReviewRememberPM
 // @namespace    http://tampermonkey.net/
-// @version      1.9
+// @version      1.9.1
 // @description  Outils pour les avis Amazon (version PickMe)
 // @author       Créateur/Codeur principal : MegaMan / Codeur secondaire : Sulff
 // @icon         https://vinepick.me/img/RR-ICO-2.png
+// @match        https://www.amazon.fr/*
 // @updateURL    https://raw.githubusercontent.com/teitong/reviewremember/main/ReviewRememberPM.user.js
 // @downloadURL  https://raw.githubusercontent.com/teitong/reviewremember/main/ReviewRememberPM.user.js
 // @require      https://vinepick.me/scripts/heic2any.min.js
@@ -18,7 +19,7 @@
     //A retirer plus tard, pour ne plus avoir l'alerte de RR à mettre à jour
     localStorage.setItem('useRR', '0');
 
-    var versionRR = "1.9";
+    var versionRR = "1.9.1";
 
     const baseUrlPickme = "https://vinepick.me";
 
@@ -1234,6 +1235,7 @@
     const isAmazonTargetPage = [
         /^https:\/\/www\.amazon\.fr\/review\/create-review/,
         /^https:\/\/www\.amazon\.fr\/review\/edit-review/,
+        /^https:\/\/www\.amazon\.fr\/reviews\/edit-review/,
         /^https:\/\/www\.amazon\.fr\/vine\/vine-reviews/,
         /^https:\/\/www\.amazon\.fr\/vine\/account$/,
         /^https:\/\/www\.amazon\.fr\/gp\/profile\/[^\/]+$/,
@@ -1712,9 +1714,18 @@
         }
 
         //Ajoute les pages en partie haute
-        function addPage() {
+        //Pour chercher '.a-text-center' ou 'nav.a-text-center'
+        function findPaginationBlock() {
+            // Cherche tous les éléments .a-text-center qui contiennent un ul.a-pagination
+            return Array.from(document.querySelectorAll('.a-text-center'))
+                .find(el => el.querySelector('ul.a-pagination') && (
+                el.tagName === 'NAV' || el.getAttribute('role') === 'navigation'
+            ));
+        }
+
+         function addPage() {
             //Sélection du contenu HTML du div source
-            const sourceElement = document.querySelector('.a-text-center');
+            const sourceElement = findPaginationBlock();
             //Vérifier si l'élément source existe
             if (sourceElement) {
                 //Maintenant que l'élément source a été mis à jour, copier son contenu HTML
