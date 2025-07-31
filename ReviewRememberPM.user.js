@@ -1,7 +1,7 @@
 //==UserScript==
 // @name         ReviewRememberPM
 // @namespace    http://tampermonkey.net/
-// @version      1.9.1
+// @version      1.9.2
 // @description  Outils pour les avis Amazon (version PickMe)
 // @author       Créateur/Codeur principal : MegaMan / Codeur secondaire : Sulff
 // @icon         https://vinepick.me/img/RR-ICO-2.png
@@ -1254,36 +1254,6 @@
 
     function initReviewRemember() {
 
-        //Correction du mot sur la page
-        var element = document.querySelector('#vvp-reviews-button--completed a.a-button-text');
-
-        //Vérifie si l'élément existe et si son texte est "Vérifiées"
-        if (element && element.textContent.trim() === "Vérifiées") {
-            //Modifie le texte en "Vérifiés"
-            element.textContent = "Vérifiés";
-        }
-
-        //Sélectionne tous les liens qui ont des IDs correspondant au pattern "a-autoid-*-announce" pour modifier le texte
-        var links = document.querySelectorAll('.vvp-reviews-table--action-btn .a-button-text');
-
-        //Boucle à travers chaque lien pour changer le texte
-        links.forEach(function(link) {
-            if (link.textContent.trim() === "Donner un avis sur l'article") {
-                link.textContent = "Donner un avis";
-            } else if (link.textContent.trim() === "Modifier le commentaire") {
-                link.textContent = "Modifier l'avis";
-            }
-        });
-
-        links = document.querySelectorAll('.vvp-orders-table--action-btn .a-button-text');
-
-        //Boucle à travers chaque lien pour changer le texte
-        links.forEach(function(link) {
-            if (link.textContent.trim() === "Détails de la commande") {
-                link.textContent = "Détails";
-            }
-        });
-
         //On initialise les infos pour la version mobile (ou non)
         var pageX = "Page X";
 
@@ -1842,55 +1812,6 @@
             return null;
         }
 
-        //Pour sauvegarder le contenu des commandes, si on est sur la page des commandes
-        function saveOrders() {
-            if (window.location.href.includes('orders')) {
-                //Extraction des données de chaque ligne de produit
-                document.querySelectorAll('.vvp-orders-table--row').forEach(row => {
-                    let productUrl = row.querySelector('.vvp-orders-table--text-col a');
-                    let asin;
-                    if (productUrl) {
-                        productUrl = productUrl.href;
-                        asin = extractASIN(productUrl);
-                    } else {
-                        return;
-                    }
-                    const key_asin = "order_" + asin;
-                    if (!localStorage.getItem(key_asin)) {
-                        const imageUrl = row.querySelector('.vvp-orders-table--image-col img').src;
-                        let productName = row.querySelector('.vvp-orders-table--text-col a .a-truncate-full')
-                        if (productName) {
-                            productName = productName.textContent.trim();
-                        } else {
-                            productName = "Indispo";
-                        }
-                        const timestampElement = row.querySelector('[data-order-timestamp]');
-                        const timestamp = timestampElement.getAttribute('data-order-timestamp');
-                        const orderDate = timestampElement ? new Date(parseInt(timestampElement.getAttribute('data-order-timestamp'))).toLocaleDateString("fr-FR") : null;
-                        const etv = row.querySelector('.vvp-orders-table--text-col.vvp-text-align-right').textContent.trim();
-                        const orderDetailsUrl = row.querySelector('.vvp-orders-table--action-btn a').href;
-                        const orderId = extractOrderId(orderDetailsUrl);
-
-                        //Préparation de l'objet à stocker
-                        const productData = {
-                            productName,
-                            imageUrl,
-                            orderDate,
-                            timestamp,
-                            etv,
-                            orderId
-                        };
-                        //console.log(productData);
-
-                        //Stockage dans localStorage avec l'ASIN comme clé
-                        if (localStorage.getItem(key_asin) === null || !isMobile()) {
-                            localStorage.setItem(key_asin, JSON.stringify(productData));
-                        }
-                    }
-                });
-            }
-        }
-
         function fireWorks() {
             //Ajout de styles pour le feu d'artifice
             let style = document.createElement('style');
@@ -2363,10 +2284,6 @@
         }
 
         if (emailEnabled === 'true') {
-            //Les ASIN ne sont pas disponibles sur la page des commandes sur Mobile, donc on ne peut pas sauvegarder les commandes
-            if (!isMobile()) {
-                saveOrders();
-            }
             addMail();
         }
 
