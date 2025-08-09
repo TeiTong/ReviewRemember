@@ -1,7 +1,7 @@
 //==UserScript==
 // @name         ReviewRememberPM
 // @namespace    http://tampermonkey.net/
-// @version      1.9.2
+// @version      1.9.3
 // @description  Outils pour les avis Amazon (version PickMe)
 // @author       Créateur/Codeur principal : MegaMan / Codeur secondaire : Sulff
 // @icon         https://vinepick.me/img/RR-ICO-2.png
@@ -19,7 +19,7 @@
     //A retirer plus tard, pour ne plus avoir l'alerte de RR à mettre à jour
     localStorage.setItem('useRR', '0');
 
-    var versionRR = "1.9.1";
+    var versionRR = "1.9.3";
 
     const baseUrlPickme = "https://vinepick.me";
 
@@ -1263,66 +1263,55 @@
             carte.dataset.traitee = 'true';
         }
 
-        //Fonction pour classer les cartes traitées par ordre décroissant de leur valeur
+        //Classer les cartes traitées par ordre décroissant
         function classerCartesTraitees() {
-            //Sélectionne uniquement les cartes marquées comme traitées
-            const cartesTraitees = Array.from(document.querySelectorAll('.review-card-container[data-traitee="true"]'));
-
-            //Trie les cartes en fonction de leur valeur numérique de manière croissante
+            const cartesTraitees = Array.from(document.querySelectorAll('.review-card-container[data-traitee="true"], .item-hero-container.review-item-hero-container[data-traitee="true"]'));
             cartesTraitees.sort((a, b) => extraireValeur(a) - extraireValeur(b));
-
-            //Réorganise les cartes dans leur conteneur parent selon le nouvel ordre croissant
             const conteneur = document.querySelector('#reviewTabContentContainer');
             cartesTraitees.forEach(carte => conteneur.prepend(carte));
         }
 
-        //Extraire la valeur numérique d'un "like", retourne 0 si non applicable
+        //Extraire la valeur numérique d'un "like"
         function extraireValeur(carte) {
-            const valeurElement = carte.querySelector('.review-reaction-count');
-            return valeurElement ? parseInt(valeurElement.innerText.trim(), 10) : 0;
+            let valeurElement = carte.querySelector('.review-reaction-count'); //Ancien sélecteur
+            if (!valeurElement) {
+                valeurElement = carte.querySelector('.review-helpful-vote__count'); //Nouveau sélecteur
+            }
+            if (valeurElement) {
+                const txt = valeurElement.innerText.trim().replace(/\u00A0/g, ' ');
+                const match = txt.match(/(\d+)/);
+                return match ? parseInt(match[1], 10) : 0;
+            }
+            return 0;
         }
 
-        //Fonction principale de réorganisation des cartes
+        //Réorganisation principale
         function reorganiserCartes() {
-            //Sélectionne uniquement les cartes pas encore traitées
-            const cartes = Array.from(document.querySelectorAll('.review-card-container:not([data-traitee="true"])'));
-
-            //Filtre les cartes avec une valeur numérique strictement supérieure à 0
+            const cartes = Array.from(document.querySelectorAll('.review-card-container:not([data-traitee="true"]), .item-hero-container.review-item-hero-container:not([data-traitee="true"])'));
             const cartesAvecValeur = cartes.filter(carte => extraireValeur(carte) > 0);
 
             if (cartesAvecValeur.length > 0) {
-                //Trie les cartes en fonction de leur valeur numérique de manière décroissante
                 cartesAvecValeur.sort((a, b) => extraireValeur(b) - extraireValeur(a));
-
-                //Préfixe les cartes triées au début de leur conteneur parent
                 const conteneur = document.querySelector('#reviewTabContentContainer');
                 cartesAvecValeur.forEach(carte => {
                     marquerCarteCommeTraitee(carte);
                     carte.style.setProperty('border', `3px solid ${reviewColor}`, 'important');
                     conteneur.prepend(carte);
                 });
-
-                //Réorganiser les cartes traitées par ordre croissant
                 classerCartesTraitees();
             }
         }
 
-        //Détecter les changements dans le DOM et appliquer le tri
+        //Observer les changements sur la page profile
         function changeProfil() {
             if (window.location.href.startsWith('https://www.amazon.fr/gp/profile')) {
-                //Configuration de l'observer pour réagir aux modifications du DOM
                 const observer = new MutationObserver((mutations) => {
                     let mutationsAvecAjouts = mutations.some(mutation => mutation.addedNodes.length > 0);
-
                     if (mutationsAvecAjouts) {
                         reorganiserCartes();
                     }
                 });
-
-                //Observer les changements dans le DOM
                 observer.observe(document.querySelector('#reviewTabContentContainer'), { childList: true, subtree: true });
-
-                //Exécution initiale au cas où des cartes seraient déjà présentes
                 reorganiserCartes();
             }
         }
