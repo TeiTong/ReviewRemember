@@ -19,7 +19,7 @@
     //A retirer plus tard, pour ne plus avoir l'alerte de RR à mettre à jour
     localStorage.setItem('useRR', '0');
 
-    var versionRR = "1.9.3";
+    var versionRR = "1.9.4";
 
     const baseUrlPickme = "https://vinepick.me";
 
