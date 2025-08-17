@@ -16,6 +16,13 @@
 
     'use strict';
 
+    //Bloque l’exécution dans les frames si @noframes n'est pas respecté par l’hôte
+    if (window.top !== window.self) return;
+
+    //Garde globale durable
+    if (window.__RR_INITED__) return;
+    window.__RR_INITED__ = true;
+
     //A retirer plus tard, pour ne plus avoir l'alerte de RR à mettre à jour
     localStorage.setItem('useRR', '0');
 
@@ -972,7 +979,6 @@
         buttonsContainer.style.flexDirection = 'column'; //Les éléments seront empilés en colonne
         buttonsContainer.style.alignItems = 'flex-start'; //Alignement des éléments à gauche
         buttonsContainer.className = 'custom-button-container';
-        buttonsContainer.id = 'rr-custom-button-container';
 
         //Créer un conteneur pour la première ligne (menu déroulant)
         const firstLineContainer = document.createElement('div');
@@ -1688,67 +1694,77 @@
         }
 
         function addPage() {
+            //Sélection du contenu HTML du div source
             const sourceElement = findPaginationBlock();
-            if (!sourceElement) return;
+            //Vérifier si l'élément source existe
+            if (sourceElement) {
+                //Maintenant que l'élément source a été mis à jour, copier son contenu HTML
+                const sourceContent = sourceElement.outerHTML;
+                const currentUrl = window.location.href;
+                //Création d'un nouveau div pour le contenu copié
+                const newDiv = document.createElement('div');
+                newDiv.innerHTML = sourceContent;
+                newDiv.style.textAlign = 'center'; //Centrer le contenu
 
-            // Si déjà injecté, on ne duplique pas
-            if (document.querySelector('#rr-top-pagination')) return;
-
-            const sourceContent = sourceElement.outerHTML;
-            const currentUrl = window.location.href;
-
-            // conteneur pagination haut de page
-            const newDiv = document.createElement('div');
-            newDiv.id = 'rr-top-pagination';
-            newDiv.innerHTML = sourceContent;
-            newDiv.style.textAlign = 'center';
-
-            let targetDiv = false;
-            if (currentUrl.includes("vine-reviews")) {
-                targetDiv = document.querySelector('.vvp-reviews-table--heading-top');
-                if (targetDiv && targetDiv.parentNode) {
-                    targetDiv.parentNode.insertBefore(newDiv, targetDiv);
+                //Sélection du div cible où le contenu sera affiché
+                //const targetDiv = document.querySelector('.vvp-tab-content .vvp-tab-content');
+                var targetDiv = false;
+                if (currentUrl.includes("vine-reviews")) {
+                    targetDiv = document.querySelector('.vvp-reviews-table--heading-top');
+                    if (targetDiv && targetDiv.parentNode) {
+                        targetDiv.parentNode.insertBefore(newDiv, targetDiv);
+                    }
+                } else if (currentUrl.includes("orders")) {
+                    targetDiv = document.querySelector('.vvp-tab-content .vvp-orders-table--heading-top') ||
+                        document.querySelector('.vvp-orders-table');
+                    if (targetDiv && targetDiv.parentNode) {
+                        targetDiv.parentNode.insertBefore(newDiv, targetDiv);
+                    }
                 }
-            } else if (currentUrl.includes("orders")) {
-                targetDiv = document.querySelector('.vvp-tab-content .vvp-orders-table--heading-top') ||
-                    document.querySelector('.vvp-orders-table');
-                if (targetDiv && targetDiv.parentNode) {
-                    targetDiv.parentNode.insertBefore(newDiv, targetDiv);
+
+                //Trouver ou créer le conteneur de pagination si nécessaire
+                let paginationContainer = sourceElement.querySelector('.a-pagination');
+                if (!paginationContainer) {
+                    paginationContainer = document.createElement('ul');
+                    paginationContainer.className = 'a-pagination';
+                    sourceElement.appendChild(paginationContainer);
                 }
-            }
+                //Ajout du bouton "Aller à" en haut et en bas
+                if (currentUrl.includes("orders") || currentUrl.includes("vine-reviews")) {
+                    //Création du bouton "Aller à la page X"
+                    const gotoButtonUp = document.createElement('li');
+                    gotoButtonUp.className = 'a-last'; //Utiliser la même classe que le bouton "Suivant" pour le style
+                    gotoButtonUp.innerHTML = `<a id="goToPageButton">${pageX}<span class="a-letter-space"></span><span class="a-letter-space"></span></a>`;
 
-            // Ajout du bouton "Aller à la page X" en haut et en bas
-            const pageXLabel = isMobile() ? "X" : "Page X";
+                    //Ajouter un événement click au bouton "Aller à"
+                    gotoButtonUp.querySelector('a').addEventListener('click', function() {
+                        askPage();
+                    });
 
-            // On cible la UL du haut (dans newDiv cloné)
-            const paginationTop = newDiv.querySelector('.a-pagination');
-            if (paginationTop && !paginationTop.querySelector('#rr-goto-top')) {
-                const gotoButtonUp = document.createElement('li');
-                gotoButtonUp.className = 'a-last';
-                gotoButtonUp.id = 'rr-goto-top';
-                gotoButtonUp.innerHTML = `<a id="goToPageButtonTop">${pageXLabel}<span class="a-letter-space"></span><span class="a-letter-space"></span></a>`;
-                gotoButtonUp.querySelector('a').addEventListener('click', askPage);
+                    //Création du bouton "Aller à la page X"
+                    const gotoButton = document.createElement('li');
+                    gotoButton.className = 'a-last'; //Utiliser la même classe que le bouton "Suivant" pour le style
+                    gotoButton.innerHTML = `<a id="goToPageButton">${pageX}<span class="a-letter-space"></span><span class="a-letter-space"></span></a>`;
 
-                const lastTop = paginationTop.querySelector('.a-last');
-                if (lastTop) paginationTop.insertBefore(gotoButtonUp, lastTop);
-            }
+                    //Ajouter un événement click au bouton "Aller à"
+                    gotoButton.querySelector('a').addEventListener('click', function() {
+                        askPage();
+                    });
+                    //Insertion X en haut de page
+                    const paginationTop = newDiv?.querySelector('.a-pagination');
+                    const lastTop = paginationTop?.querySelector('.a-last');
 
-            // Ajoute le bouton en bas (dans la pagination originale)
-            let paginationBottom = sourceElement.querySelector('.a-pagination');
-            if (!paginationBottom) {
-                paginationBottom = document.createElement('ul');
-                paginationBottom.className = 'a-pagination';
-                sourceElement.appendChild(paginationBottom);
-            }
-            if (paginationBottom && !paginationBottom.querySelector('#rr-goto-bottom')) {
-                const gotoButtonBottom = document.createElement('li');
-                gotoButtonBottom.className = 'a-last';
-                gotoButtonBottom.id = 'rr-goto-bottom';
-                gotoButtonBottom.innerHTML = `<a id="goToPageButtonBottom">${pageXLabel}<span class="a-letter-space"></span><span class="a-letter-space"></span></a>`;
-                gotoButtonBottom.querySelector('a').addEventListener('click', askPage);
+                    if (paginationTop && lastTop && gotoButtonUp) {
+                        paginationTop.insertBefore(gotoButtonUp, lastTop);
+                    }
 
-                const lastBottom = paginationBottom.querySelector('.a-last');
-                if (lastBottom) paginationBottom.insertBefore(gotoButtonBottom, lastBottom);
+                    //Insertion en bas de page
+                    const lastBottom = paginationContainer?.querySelector('.a-last');
+
+                    if (paginationContainer && lastBottom && gotoButton) {
+                        paginationContainer.insertBefore(gotoButton, lastBottom);
+                    }
+                }
             }
         }
 
@@ -2009,36 +2025,29 @@
 
         function addEmailButton() {
             let header = document.querySelector('.vvp-reviews-table--heading-top');
-            if (!header) return;
-
-            // Si déjà injecté, on ne duplique pas
-            if (header.querySelector('#rr-email-actions')) return;
-
             if (isMobile()) {
-                // rendre visible le header caché par défaut
-                header.style.display = 'block';
+                //On rend visible le header qui est caché par défaut
+                const header = document.querySelector('.vvp-reviews-table--heading-top');
+                if (header) header.style.display = 'block';
             }
-
+            //Créer un conteneur pour le bouton et l'email qui seront alignés à droite
             const actionsContainer = document.createElement('div');
-            actionsContainer.id = 'rr-email-actions';
             if (isMobile()) {
                 actionsContainer.style.cssText = 'right: 0; top: 0;';
             } else {
                 actionsContainer.style.cssText = 'text-align: right; position: absolute; right: 0; top: 0;';
             }
 
-            // Bouton 'Générer email'
+            //Bouton 'Générer email'
             const button = document.createElement('span');
             button.className = 'a-button a-button-primary vvp-reviews-table--action-btn';
-            button.style.marginRight = '10px';
-            button.style.marginTop = '10px';
-            button.style.marginBottom = '5px';
+            button.style.marginRight = '10px'; //Marge à droite du bouton
+            button.style.marginTop = '10px'; //Marge en haut du bouton
+            button.style.marginBottom = '5px'; //Marge en haut du bouton
             button.style.paddingLeft = '12px';
             button.style.paddingRight = '12px';
-
             const buttonInner = document.createElement('span');
             buttonInner.className = 'a-button-inner';
-
             const buttonText = document.createElement('a');
             buttonText.className = 'a-button-text';
             buttonText.textContent = 'Générer email';
@@ -2054,19 +2063,21 @@
                     console.error('[ReviewRemember] Erreur lors de la copie :', err);
                 });
             });
+            //Réduction du padding sur `buttonText`
+            buttonText.style.paddingLeft = '2px'; //Ajustez selon vos besoins
+            buttonText.style.paddingRight = '2px'; //Ajustez selon vos besoins
 
-            buttonText.style.paddingLeft = '2px';
-            buttonText.style.paddingRight = '2px';
-            buttonInner.style.paddingLeft = '0px';
-            buttonInner.style.paddingRight = '0px';
+            buttonInner.style.paddingLeft = '0px'; //Enlève le padding à gauche
+            buttonInner.style.paddingRight = '0px'; //Enlève le padding à droite
 
             buttonInner.appendChild(buttonText);
             button.appendChild(buttonInner);
 
-            // Email support (copie rapide)
+            //Conteneur et style pour l'email
             const emailSpan = document.createElement('div');
             emailSpan.innerHTML = 'Support : <a href="javascript:void(0)" style="text-decoration: underline; color: #007FFF;">vine-support@amazon.fr</a>';
             emailSpan.style.marginRight = '5px';
+            //Gestionnaire d'événements pour copier l'email
             const emailLink = emailSpan.querySelector('a');
             emailLink.addEventListener('click', function() {
                 navigator.clipboard.writeText('vine-support@amazon.fr').then(() => {
@@ -2076,11 +2087,14 @@
                 });
             });
 
+            //Ajouter le bouton et l'email au conteneur d'actions
             actionsContainer.appendChild(button);
             actionsContainer.appendChild(emailSpan);
-
-            header.style.position = 'relative';
-            header.appendChild(actionsContainer);
+            //Ajouter le conteneur d'actions à l'en-tête
+            if (header) {
+                header.style.position = 'relative'; //S'assure que le positionnement absolu de actionsContainer fonctionne correctement
+                header.appendChild(actionsContainer);
+            }
         }
 
         function generateEmail() {
@@ -2285,32 +2299,28 @@
         let buttonsAdded = false; //Suivre si les boutons ont été ajoutés
 
         function tryToAddButtons() {
-            if (buttonsAdded) return;
+            if (buttonsAdded) return; //Arrêtez si les boutons ont déjà été ajoutés
 
             const submitButtonArea =
                   document.querySelector(selectorButtons) ||
                   document.querySelector(selectorButtonsOld);
-
             if (submitButtonArea) {
-                // évite la réinjection si déjà présent (tous runs confondus)
-                if (!submitButtonArea.querySelector('#rr-custom-button-container')) {
-                    addButtons(submitButtonArea);
-                }
-                buttonsAdded = true;
-
-                // Agrandir la zone pour le texte de l'avis
+                addButtons(submitButtonArea);
+                buttonsAdded = true; //Marquer que les boutons ont été ajoutés
+                //Agrandir la zone pour le texte de l'avis
                 const textarea = document.getElementById('reviewText');
                 if (textarea) {
-                    textarea.style.height = '300px';
+                    textarea.style.height = '300px'; //Définit la hauteur à 300px
                     textarea.style.resize = 'both';
                 }
-
-                // Ajout multiple de fichiers média (inchangé)
+                //Ajout multiple de fichiers média (nouveau comportement)
                 var inputElement = document.querySelector(
                     'input[data-testid="in-context-ryp__form-field--mediaUploadInputHidden"], #media'
                 );
                 if (inputElement) {
                     inputElement.setAttribute('multiple', '');
+
+                    //Permet de téléverser séquentiellement les fichiers sélectionnés
                     let isProcessingUpload = false;
                     inputElement.addEventListener('change', async function (e) {
                         if (isProcessingUpload) return;
@@ -2319,6 +2329,7 @@
 
                         let files = Array.from(inputElement.files);
 
+                        //Affichage de la barre de progression
                         let progressDiv;
                         if (files.length > 0) {
                             progressDiv = document.createElement('div');
@@ -2336,7 +2347,7 @@
                             document.body.appendChild(progressDiv);
                         }
 
-                        // Conversion HEIC -> JPEG si besoin (inchangé)
+                        //Conversion des fichiers HEIC en JPEG
                         for (let i = 0; i < files.length; i++) {
                             const f = files[i];
                             const isHeic = f.type === 'image/heic' || f.type === 'image/heif' || /\.heic$/i.test(f.name) || /\.heif$/i.test(f.name);
@@ -2373,7 +2384,8 @@
                                     progressDiv.textContent = `Envoi en cours...\n${index}/${files.length}`;
                                 }
 
-                                const randomDelay = 1000 + Math.random() * 2000;
+                                //Délai aléatoire pour éviter un rythme trop régulier
+                                const randomDelay = 1000 + Math.random() * 2000; //1 à 3 secondes
                                 setTimeout(uploadNext, randomDelay);
                             };
 
@@ -2394,7 +2406,7 @@
                     });
                 }
             } else {
-                setTimeout(tryToAddButtons, 100); // réessaye
+                setTimeout(tryToAddButtons, 100); //Réessayer après un demi-seconde
             }
         }
 
