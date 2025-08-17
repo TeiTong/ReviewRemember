@@ -1,7 +1,7 @@
 //==UserScript==
 // @name         ReviewRememberiOS
 // @namespace    http://tampermonkey.net/
-// @version      1.9.4
+// @version      1.9.5
 // @description  Outils pour les avis Amazon (version PickMe)
 // @author       Créateur/Codeur principal : MegaMan / Codeur secondaire : Sulff
 // @icon         https://vinepick.me/img/RR-ICO-2.png
@@ -10,23 +10,17 @@
 // @downloadURL  https://raw.githubusercontent.com/teitong/reviewremember/main/ReviewRememberiOS.user.js
 // @require      https://vinepick.me/scripts/heic2any.min.js
 // @grant        GM_registerMenuCommand
+// @noframes
 //==/UserScript==
 
 (function() {
 
     'use strict';
 
-    //Bloque l’exécution dans les frames si @noframes n'est pas respecté par l’hôte
-    if (window.top !== window.self) return;
-
-    //Garde globale durable
-    if (window.__RR_INITED__) return;
-    window.__RR_INITED__ = true;
-
     //A retirer plus tard, pour ne plus avoir l'alerte de RR à mettre à jour
     localStorage.setItem('useRR', '0');
 
-    var versionRR = "1.9.4";
+    var versionRR = "1.9.5";
 
     const baseUrlPickme = "https://vinepick.me";
 
