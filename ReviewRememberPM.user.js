@@ -1,7 +1,7 @@
 //==UserScript==
 // @name         ReviewRememberPM
 // @namespace    http://tampermonkey.net/
-// @version      1.9.5
+// @version      1.9.6
 // @description  Outils pour les avis Amazon (version PickMe)
 // @author       Créateur/Codeur principal : MegaMan / Codeur secondaire : Sulff
 // @icon         https://vinepick.me/img/RR-ICO-2.png
@@ -25,7 +25,7 @@
     //A retirer plus tard, pour ne plus avoir l'alerte de RR à mettre à jour
     localStorage.setItem('useRR', '0');
 
-    var versionRR = "1.9.5";
+    var versionRR = "1.9.6";
 
     const baseUrlPickme = "https://vinepick.me";
 
@@ -1692,6 +1692,8 @@
                     return;
                 }
 
+                imageCol.style.position = 'relative';
+
                 const link = ligne.querySelector('#vvp-reviews-product-detail-page-link, a[href*="/dp/"]');
                 const asinMatch = link ? link.href.match(/\/dp\/([A-Z0-9]{10})/) : null;
                 if (!asinMatch) {
@@ -1703,7 +1705,10 @@
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
                 checkbox.classList.add('rr-hide-review-checkbox');
-                checkbox.style.marginRight = '5px';
+                checkbox.style.position = 'absolute';
+                checkbox.style.top = '5px';
+                checkbox.style.left = '5px';
+                checkbox.style.zIndex = '20';
                 checkbox.checked = localStorage.getItem(storageKey) === 'true';
 
                 if (checkbox.checked) {
@@ -1720,7 +1725,7 @@
                     }
                 });
 
-                imageCol.prepend(checkbox);
+                imageCol.appendChild(checkbox);
             });
         }
 
