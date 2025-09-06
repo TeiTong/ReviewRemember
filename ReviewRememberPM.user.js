@@ -1,7 +1,7 @@
 //==UserScript==
 // @name         ReviewRememberPM
 // @namespace    http://tampermonkey.net/
-// @version      1.9.4
+// @version      1.9.5
 // @description  Outils pour les avis Amazon (version PickMe)
 // @author       Créateur/Codeur principal : MegaMan / Codeur secondaire : Sulff
 // @icon         https://vinepick.me/img/RR-ICO-2.png
@@ -25,7 +25,7 @@
     //A retirer plus tard, pour ne plus avoir l'alerte de RR à mettre à jour
     localStorage.setItem('useRR', '0');
 
-    var versionRR = "1.9.4";
+    var versionRR = "1.9.5";
 
     const baseUrlPickme = "https://vinepick.me";
 
@@ -1108,6 +1108,7 @@
       ${createCheckbox('enableReviewStatusFunction', 'Surligner les avis vérifiés', 'Change la couleur du "Statut du commentaire" dans vos avis "Vérifiées" en fonction de leur statut actuel (Approuvé, Non approuvé, etc...)')}
       ${createCheckbox('enableColorFunction', 'Changer la couleur de la barre de progression des avis', 'Change la couleur de la barre de progression des avis sur la page "Compte". Entre 0 et 59% -> Rouge, 60 à 89% -> Orange et supérieur à 90% -> Vert')}
       ${createCheckbox('filterEnabled', 'Cacher les avis approuvés', 'Dans l\'onglet "Vérifiées" de vos avis, si l\'avis  est Approuvé, alors il est caché')}
+      ${createCheckbox('hidePendingEnabled', 'Pouvoir cacher les avis "En attente de vérification"')}
       ${createCheckbox('lastUpdateEnabled', 'Afficher la date de la dernière modification du % d\'avis', 'Indique la date de la dernière modification du % des avis sur le compte')}
       ${createCheckbox('targetPercentageEnabled', 'Afficher le nombre d\'avis nécessaires pour atteindre un % cible', 'Affiche le nombre d\'avis qu\'il va être nécessaire de faire pour atteindre le % défini')}
       ${createCheckbox('pageEnabled', 'Affichage des pages en partie haute', 'En plus des pages de navigation en partie basse, ajoute également la navigation des pages en haut')}
@@ -1682,6 +1683,47 @@
             });
         }
 
+        //Ajoute une case à cocher pour masquer les avis en attente
+        function addHidePendingCheckboxes() {
+            const lignes = document.querySelectorAll('.vvp-reviews-table--row');
+            lignes.forEach(function(ligne) {
+                const imageCol = ligne.querySelector('.vvp-reviews-table--image-col');
+                if (!imageCol || imageCol.querySelector('.rr-hide-review-checkbox')) {
+                    return;
+                }
+
+                const link = ligne.querySelector('#vvp-reviews-product-detail-page-link, a[href*="/dp/"]');
+                const asinMatch = link ? link.href.match(/\/dp\/([A-Z0-9]{10})/) : null;
+                if (!asinMatch) {
+                    return;
+                }
+                const asin = asinMatch[1];
+                const storageKey = 'rr-hidden-' + asin;
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.classList.add('rr-hide-review-checkbox');
+                checkbox.style.marginRight = '5px';
+                checkbox.checked = localStorage.getItem(storageKey) === 'true';
+
+                if (checkbox.checked) {
+                    ligne.style.opacity = '0.5';
+                }
+
+                checkbox.addEventListener('change', function() {
+                    if (this.checked) {
+                        ligne.style.opacity = '0.5';
+                        localStorage.setItem(storageKey, 'true');
+                    } else {
+                        ligne.style.opacity = '';
+                        localStorage.removeItem(storageKey);
+                    }
+                });
+
+                imageCol.prepend(checkbox);
+            });
+        }
+
         //Ajoute les pages en partie haute
         //Pour chercher '.a-text-center' ou 'nav.a-text-center'
         function findPaginationBlock() {
@@ -2174,6 +2216,7 @@
         var enableReviewStatusFunction = localStorage.getItem('enableReviewStatusFunction');
         var enableColorFunction = localStorage.getItem('enableColorFunction');
         var filterEnabled = localStorage.getItem('filterEnabled');
+        var hidePendingEnabled = localStorage.getItem('hidePendingEnabled');
         var profilEnabled = localStorage.getItem('profilEnabled');
         //var footerEnabled = localStorage.getItem('footerEnabled');
         var footerEnabled = 'false';
@@ -2207,6 +2250,11 @@
         if (filterEnabled === null) {
             filterEnabled = 'true';
             localStorage.setItem('filterEnabled', filterEnabled);
+        }
+
+        if (hidePendingEnabled === null) {
+            hidePendingEnabled = 'true';
+            localStorage.setItem('hidePendingEnabled', hidePendingEnabled);
         }
 
         if (profilEnabled === null) {
@@ -2260,6 +2308,10 @@
 
         if (enableColorFunction === 'true') {
             changeColor();
+        }
+
+        if (hidePendingEnabled === 'true') {
+            addHidePendingCheckboxes();
         }
 
         if (filterEnabled === 'true') {
