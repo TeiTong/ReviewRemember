@@ -1,7 +1,7 @@
 //==UserScript==
 // @name         ReviewRememberPM
 // @namespace    http://tampermonkey.net/
-// @version      1.9.6
+// @version      1.9.7
 // @description  Outils pour les avis Amazon (version PickMe)
 // @author       Créateur/Codeur principal : MegaMan / Codeur secondaire : Sulff
 // @icon         https://vinepick.me/img/RR-ICO-2.png
@@ -25,7 +25,7 @@
     //A retirer plus tard, pour ne plus avoir l'alerte de RR à mettre à jour
     localStorage.setItem('useRR', '0');
 
-    var versionRR = "1.9.6";
+    var versionRR = "1.9.7";
 
     const baseUrlPickme = "https://vinepick.me";
 
@@ -2376,8 +2376,42 @@
                 if (inputElement) {
                     inputElement.setAttribute('multiple', '');
 
-                    //Permet de téléverser séquentiellement les fichiers sélectionnés
+                     //Gestion du glisser-déposer d'images
                     let isProcessingUpload = false;
+                    const dropZone =
+                        document.querySelector('div[data-testid="in-context-ryp__form-field--mediaUpload"]') ||
+                        inputElement.closest('label') ||
+                        inputElement.parentElement;
+                    if (dropZone) {
+                        const styleDrag = document.createElement('style');
+                        styleDrag.textContent = '.rr-dragover { outline: 2px dashed #1E90FF; }';
+                        document.head.appendChild(styleDrag);
+                        ['dragenter', 'dragover'].forEach(function (evt) {
+                            dropZone.addEventListener(evt, function (e) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                dropZone.classList.add('rr-dragover');
+                            });
+                        });
+                        ['dragleave', 'drop'].forEach(function (evt) {
+                            dropZone.addEventListener(evt, function (e) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                dropZone.classList.remove('rr-dragover');
+                            });
+                        });
+                        dropZone.addEventListener('drop', function (e) {
+                            if (isProcessingUpload) return;
+                            const dt = new DataTransfer();
+                            Array.from(e.dataTransfer.files).forEach(function (file) {
+                                dt.items.add(file);
+                            });
+                            inputElement.files = dt.files;
+                            inputElement.dispatchEvent(new Event('change', { bubbles: true }));
+                        });
+                    }
+
+                    //Permet de téléverser séquentiellement les fichiers sélectionnés
                     inputElement.addEventListener('change', async function (e) {
                         if (isProcessingUpload) return;
                         e.stopImmediatePropagation();
