@@ -1,7 +1,7 @@
 //==UserScript==
 // @name         ReviewRememberPM
 // @namespace    http://tampermonkey.net/
-// @version      1.9.7
+// @version      1.9.8
 // @description  Outils pour les avis Amazon (version PickMe)
 // @author       Créateur/Codeur principal : MegaMan / Codeur secondaire : Sulff
 // @icon         https://vinepick.me/img/RR-ICO-2.png
@@ -25,7 +25,7 @@
     //A retirer plus tard, pour ne plus avoir l'alerte de RR à mettre à jour
     localStorage.setItem('useRR', '0');
 
-    var versionRR = "1.9.7";
+    var versionRR = "1.9.8";
 
     const baseUrlPickme = "https://vinepick.me";
 
@@ -1243,16 +1243,25 @@
 
     const url = window.location.href;
 
-    const isAmazonTargetPage = [
-        /^https:\/\/www\.amazon\.fr\/review\/create-review/,
-        /^https:\/\/www\.amazon\.fr\/review\/edit-review/,
-        /^https:\/\/www\.amazon\.fr\/reviews\/edit-review/,
-        /^https:\/\/www\.amazon\.fr\/vine\/vine-reviews/,
-        /^https:\/\/www\.amazon\.fr\/vine\/account$/,
-        /^https:\/\/www\.amazon\.fr\/gp\/profile\/[^\/]+$/,
-        /^https:\/\/www\.amazon\.fr\/vine\/orders/,
-        /^https:\/\/www\.amazon\.fr\/vine\/resources$/
-    ].some(pattern => pattern.test(url));
+    let isAmazonTargetPage = false;
+
+    try {
+        const { pathname } = new URL(url);
+        const normalizedPath = pathname.replace(/\/$/, '');
+
+        isAmazonTargetPage = [
+            '/review/create-review',
+            '/review/edit-review',
+            '/reviews/edit-review',
+            '/vine/vine-reviews',
+            '/vine/account',
+            '/vine/orders',
+            '/vine/resources'
+        ].some(path => normalizedPath === path || normalizedPath.startsWith(path + '/'))
+        || normalizedPath.startsWith('/gp/profile/');
+    } catch (error) {
+        console.warn('ReviewRememberPM: unable to parse URL for matching', error);
+    }
 
     if (!isAmazonTargetPage) {
         window.createConfigPopupRR = createConfigPopupRR;
@@ -2258,7 +2267,7 @@
         }
 
         if (hidePendingEnabled === null) {
-            hidePendingEnabled = 'true';
+            hidePendingEnabled = 'false';
             localStorage.setItem('hidePendingEnabled', hidePendingEnabled);
         }
 
@@ -2376,12 +2385,12 @@
                 if (inputElement) {
                     inputElement.setAttribute('multiple', '');
 
-                     //Gestion du glisser-déposer d'images
+                    //Gestion du glisser-déposer d'images
                     let isProcessingUpload = false;
                     const dropZone =
-                        document.querySelector('div[data-testid="in-context-ryp__form-field--mediaUpload"]') ||
-                        inputElement.closest('label') ||
-                        inputElement.parentElement;
+                          document.querySelector('div[data-testid="in-context-ryp__form-field--mediaUpload"]') ||
+                          inputElement.closest('label') ||
+                          inputElement.parentElement;
                     if (dropZone) {
                         const styleDrag = document.createElement('style');
                         styleDrag.textContent = '.rr-dragover { outline: 2px dashed #1E90FF; }';
