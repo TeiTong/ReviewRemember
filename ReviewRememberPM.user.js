@@ -115,14 +115,14 @@
             for (let i = 1; i < lines.length; i++) {
                 if (lines[i]) {
                     const columns = lines[i].split(';');
-                    if (columns.length >= 7) {
+                    if (columns.length >= 6) {
                         const date = columns[0].trim();
                         const type = columns[1].trim();
                         const name = columns[2].trim();
                         const asin = columns[3].trim();
-                        const evaluation = (columns[4] || '').trim();
-                        const title = columns[5].trim();
-                        const review = (columns[6] || '').trim().replace(/\\n/g, '\n');
+                        const title = columns[4].trim();
+                        const review = columns[5].trim().replace(/\\n/g, '\n');
+                        const evaluation = (columns[6] || '').trim();
 
                         if (type === "Avis") {
                             const reviewData = { title, review, date };
@@ -1116,6 +1116,7 @@
       ${createCheckbox('filterEnabled', 'Cacher les avis approuvés', 'Dans l\'onglet "Vérifiées" de vos avis, si l\'avis  est Approuvé, alors il est caché')}
       ${createCheckbox('hidePendingEnabled', 'Pouvoir cacher les avis "En attente de vérification"')}
       ${createCheckbox('lastUpdateEnabled', 'Afficher la date de la dernière modification du % d\'avis', 'Indique la date de la dernière modification du % des avis sur le compte')}
+      ${createCheckbox('evaluationBreakdownEnabled', 'Afficher la répartition des évaluations', 'Affiche le détail des évaluations Excellent, Bien, Juste et Pauvre à côté du score')}
       ${createCheckbox('targetPercentageEnabled', 'Afficher le nombre d\'avis nécessaires pour atteindre un % cible', 'Affiche le nombre d\'avis qu\'il va être nécessaire de faire pour atteindre le % défini')}
       ${createCheckbox('pageEnabled', 'Affichage des pages en partie haute', 'En plus des pages de navigation en partie basse, ajoute également la navigation des pages en haut')}
       ${createCheckbox('emailEnabled', 'Génération automatique des emails', 'Permet de générer automatiquement des mails à destination du support vine pour faire retirer un produit de votre liste d\'avis. Attention, on ne peut générer un mail que si le produit a été vu au moins une fois dans la liste de l\'onglet "Commandes"')}
@@ -1395,6 +1396,8 @@
                 //Récupérer le pourcentage et la date précédents depuis le stockage local
                 const previousPercentage = parseFloat(localStorage.getItem('vineProgressPercentage')) || null;
                 const previousDate = localStorage.getItem('vineProgressDate') || null;
+                const showEvaluationBreakdown = evaluationBreakdownEnabled === 'true';
+                const evaluationStats = showEvaluationBreakdown ? computeEvaluationStats() : { stats: {}, totalEvaluated: 0, ratingOrder: [] };
 
                 //console.log("Pourcentage précédent :", previousPercentage);
                 //console.log("Date précédente :", previousDate);
@@ -1429,14 +1432,55 @@
                         //console.log("Nouvelle date stockée :", dateTimeNow);
 
                         //Mettre à jour le texte de progression avec la date et l'heure de la dernière modification
-                        updateDateTimeElement(progressContainer, dateTimeNow, differenceText, differenceColor);
+                        updateDateTimeElement(progressContainer, dateTimeNow, differenceText, differenceColor, evaluationStats, showEvaluationBreakdown);
                     } else if (previousDate) {
                         //Si aucune modification détectée, afficher la date et l'heure de la dernière modification
-                        updateDateTimeElement(progressContainer, previousDate);
+                        updateDateTimeElement(progressContainer, previousDate, '', '', evaluationStats, showEvaluationBreakdown);
                     }
                 }
 
-                function updateDateTimeElement(containerElement, dateTime, differenceText = '', differenceColor = '') {
+                function computeEvaluationStats() {
+                    const ratingOrder = ['Excellent', 'Bien', 'Juste', 'Pauvre'];
+                    const stats = ratingOrder.reduce((acc, rating) => {
+                        acc[rating] = 0;
+                        return acc;
+                    }, {});
+                    let totalEvaluated = 0;
+
+                    Object.keys(localStorage).forEach(function(key) {
+                        if (!key.startsWith('review_') || key === 'review_templates') {
+                            return;
+                        }
+
+                        const storedValue = localStorage.getItem(key);
+                        if (!storedValue) {
+                            return;
+                        }
+
+                        try {
+                            const parsedValue = JSON.parse(storedValue);
+                            const evaluationRaw = parsedValue && parsedValue.evaluation;
+
+                            if (!evaluationRaw) {
+                                return;
+                            }
+
+                            const matchedRating = ratingOrder.find(rating => rating.toLowerCase() === evaluationRaw.toString().trim().toLowerCase());
+                            if (!matchedRating) {
+                                return;
+                            }
+
+                            stats[matchedRating] += 1;
+                            totalEvaluated += 1;
+                        } catch (error) {
+                            console.error("[ReviewRemember] Erreur lors de la lecture de l'évaluation pour la clé :", key, error);
+                        }
+                    });
+
+                    return { stats, totalEvaluated, ratingOrder };
+                }
+
+                function updateDateTimeElement(containerElement, dateTime, differenceText = '', differenceColor = '', evaluationStats = { stats: {}, totalEvaluated: 0, ratingOrder: [] }, showBreakdown = true) {
                     //Supprimer l'élément de date précédent s'il existe
                     let previousDateTimeElement = document.querySelector('.last-modification');
                     if (previousDateTimeElement) {
@@ -1446,6 +1490,8 @@
                     //Créer un nouvel élément de date
                     const dateTimeElement = document.createElement('span');
                     dateTimeElement.className = 'last-modification';
+                    dateTimeElement.style.display = 'block';
+                    dateTimeElement.style.marginTop = '8px';
                     //dateTimeElement.style.marginLeft = '10px';
                     dateTimeElement.innerHTML = `Dernière modification constatée le <strong>${dateTime}</strong>`;
 
@@ -1456,8 +1502,33 @@
                         dateTimeElement.appendChild(differenceElement);
                     }
 
-                    //Insérer le nouvel élément après le conteneur de progression
-                    containerElement.parentNode.insertBefore(dateTimeElement, containerElement.nextSibling);
+                    //Supprimer les anciennes informations de répartition si elles existent
+                    const previousBreakdown = document.querySelector('.rr-evaluation-breakdown');
+                    if (previousBreakdown) {
+                        previousBreakdown.remove();
+                    }
+
+                    if (showBreakdown) {
+                        //Créer un nouvel élément pour la répartition des évaluations
+                        const breakdownElement = document.createElement('div');
+                        breakdownElement.className = 'rr-evaluation-breakdown';
+                        breakdownElement.style.display = 'block';
+                        breakdownElement.style.marginTop = '8px';
+
+                        const breakdownItems = (evaluationStats.ratingOrder && evaluationStats.ratingOrder.length ? evaluationStats.ratingOrder : ['Excellent', 'Bien', 'Juste', 'Pauvre']).map(rating => {
+                            const count = evaluationStats.stats && evaluationStats.stats[rating] ? evaluationStats.stats[rating] : 0;
+                            const percentage = evaluationStats.totalEvaluated > 0 ? ((count / evaluationStats.totalEvaluated) * 100).toFixed(1) : '0.0';
+                            return `<strong>${rating}</strong> : ${percentage}% (${count})`;
+                        });
+
+                        breakdownElement.innerHTML = breakdownItems.join(' | ');
+
+                        //Insérer les nouveaux éléments après le conteneur de progression
+                        containerElement.parentNode.insertBefore(breakdownElement, containerElement.nextSibling);
+                        breakdownElement.insertAdjacentElement('afterend', dateTimeElement);
+                    } else {
+                        containerElement.parentNode.insertBefore(dateTimeElement, containerElement.nextSibling);
+                    }
                 }
             }
         }
@@ -2310,6 +2381,7 @@
         var pageEnabled = localStorage.getItem('pageEnabled');
         var emailEnabled = localStorage.getItem('emailEnabled');
         var lastUpdateEnabled = localStorage.getItem('lastUpdateEnabled');
+        var evaluationBreakdownEnabled = localStorage.getItem('evaluationBreakdownEnabled');
         var targetPercentageEnabled = localStorage.getItem('targetPercentageEnabled');
         var autoSaveEnabled = localStorage.getItem('autoSaveEnabled');
 
@@ -2367,6 +2439,11 @@
         if (lastUpdateEnabled === null) {
             lastUpdateEnabled = 'true';
             localStorage.setItem('lastUpdateEnabled', lastUpdateEnabled);
+        }
+
+        if (evaluationBreakdownEnabled === null) {
+            evaluationBreakdownEnabled = 'true';
+            localStorage.setItem('evaluationBreakdownEnabled', evaluationBreakdownEnabled);
         }
 
         if (targetPercentageEnabled === null) {
