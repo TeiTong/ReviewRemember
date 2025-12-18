@@ -1,7 +1,7 @@
 //==UserScript==
 // @name         ReviewRememberPM
 // @namespace    http://tampermonkey.net/
-// @version      1.9.8
+// @version      1.9.9
 // @description  Outils pour les avis Amazon (version PickMe)
 // @author       Créateur/Codeur principal : MegaMan / Codeur secondaire : Sulff
 // @icon         https://vinepick.me/img/RR-ICO-2.png
@@ -25,7 +25,7 @@
     //A retirer plus tard, pour ne plus avoir l'alerte de RR à mettre à jour
     localStorage.setItem('useRR', '0');
 
-    var versionRR = "1.9.8";
+    var versionRR = "1.9.9";
 
     const baseUrlPickme = "https://vinepick.me";
 
@@ -59,14 +59,14 @@
         let csvContent = "\uFEFF"; // BOM pour UTF-8
 
         //Ajouter l'en-tête du CSV
-        csvContent += "Date;Type;Nom;ASIN;Titre de l'avis;Contenu de l'avis\n";
+        csvContent += "Date;Type;Nom;ASIN;Evaluation;Titre de l'avis;Contenu de l'avis\n";
 
         //Exporter les modèles
         let savedTemplates = JSON.parse(localStorage.getItem('review_templates')) || [];
         savedTemplates.forEach(template => {
             const { name, title, review } = template;
-            //Ajoute une ligne détaillée pour chaque modèle avec une colonne vide pour ASIN
-            csvContent += `;Modèle;${name};;${title.replace(/;/g, ',')};${review.replace(/\n/g, '\\n')}\n`;
+            //Ajoute une ligne détaillée pour chaque modèle avec une colonne vide pour ASIN et Evaluation
+            csvContent += `;Modèle;${name};;;${title.replace(/;/g, ',')};${review.replace(/\n/g, '\\n')}\n`;
         });
 
         //Itérer sur les éléments de localStorage
@@ -76,10 +76,11 @@
                 const asin = key.replace('review_', ''); //Extraire l'ASIN
                 const title = reviewData.title.replace(/;/g, ','); //Remplacer les ";" par des ","
                 const review = reviewData.review.replace(/\n/g, '\\n');
+                const evaluation = reviewData.evaluation ? reviewData.evaluation.replace(/;/g, ',') : '';
+                const date = reviewData.date || '';
 
                 //Ajouter la ligne pour les avis
-                const date = reviewData.date || '';
-                csvContent += `${date};Avis;;${asin};${title};${review}\n`;
+                csvContent += `${date};Avis;;${asin};${evaluation};${title};${review}\n`;
             }
         });
 
@@ -114,16 +115,21 @@
             for (let i = 1; i < lines.length; i++) {
                 if (lines[i]) {
                     const columns = lines[i].split(';');
-                    if (columns.length >= 6) {
+                    if (columns.length >= 7) {
                         const date = columns[0].trim();
                         const type = columns[1].trim();
                         const name = columns[2].trim();
                         const asin = columns[3].trim();
-                        const title = columns[4].trim();
-                        const review = columns[5].trim().replace(/\\n/g, '\n');
+                        const evaluation = (columns[4] || '').trim();
+                        const title = columns[5].trim();
+                        const review = (columns[6] || '').trim().replace(/\\n/g, '\n');
 
                         if (type === "Avis") {
-                            localStorage.setItem(`review_${asin}`, JSON.stringify({ title, review, date }));
+                            const reviewData = { title, review, date };
+                            if (evaluation && evaluation.toLowerCase() !== 'en attente') {
+                                reviewData.evaluation = evaluation;
+                            }
+                            localStorage.setItem(`review_${asin}`, JSON.stringify(reviewData));
                         } else if (type === "Modèle") {
                             let savedTemplates = JSON.parse(localStorage.getItem('review_templates')) || [];
                             const existingIndex = savedTemplates.findIndex(template => template.name === name);
@@ -1738,6 +1744,73 @@
             });
         }
 
+        function getAsinFromRow(row) {
+            const link = row.querySelector('#vvp-reviews-product-detail-page-link, a[href*="/dp/"]');
+            if (!link) {
+                return null;
+            }
+            return extractASIN(link.href);
+        }
+
+        function syncQualityEvaluations() {
+            const rows = document.querySelectorAll('.vvp-reviews-table--row');
+
+            rows.forEach(row => {
+                const asin = getAsinFromRow(row);
+                if (!asin) {
+                    return;
+                }
+
+                const textColumns = row.querySelectorAll('.vvp-reviews-table--text-col');
+                const evaluationCell = textColumns[3];
+                const evaluationValue = evaluationCell ? evaluationCell.textContent.trim() : '';
+
+                if (!evaluationValue || evaluationValue.toLowerCase() === 'en attente') {
+                    return;
+                }
+
+                const storageKey = `review_${asin}`;
+                const storedReview = localStorage.getItem(storageKey);
+                if (!storedReview) {
+                    return;
+                }
+
+                try {
+                    const parsedReview = JSON.parse(storedReview);
+                    if (parsedReview.evaluation === evaluationValue) {
+                        return;
+                    }
+                    parsedReview.evaluation = evaluationValue;
+                    localStorage.setItem(storageKey, JSON.stringify(parsedReview));
+                } catch (error) {
+                    console.error("[ReviewRemember] Erreur lors de la mise à jour de l'évaluation pour l'ASIN :", asin, error);
+                }
+            });
+        }
+
+        function initQualityEvaluationSync() {
+            if (!window.location.href.includes('review-type=completed')) {
+                return;
+            }
+
+            const ensureSync = () => {
+                const table = document.querySelector('.vvp-reviews-table');
+                if (!table) {
+                    setTimeout(ensureSync, 500);
+                    return;
+                }
+
+                syncQualityEvaluations();
+
+                const observer = new MutationObserver(() => {
+                    syncQualityEvaluations();
+                });
+                observer.observe(table, { childList: true, subtree: true });
+            };
+
+            ensureSync();
+        }
+
         //Ajoute les pages en partie haute
         //Pour chercher '.a-text-center' ou 'nav.a-text-center'
         function findPaginationBlock() {
@@ -2359,6 +2432,8 @@
         if (autoSaveEnabled === 'true') {
             autoSaveReview();
         }
+
+        initQualityEvaluationSync();
         //End
 
         let buttonsAdded = false; //Suivre si les boutons ont été ajoutés
