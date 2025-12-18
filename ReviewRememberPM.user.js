@@ -1118,6 +1118,7 @@
       ${createCheckbox('lastUpdateEnabled', 'Afficher la date de la dernière modification du % d\'avis', 'Indique la date de la dernière modification du % des avis sur le compte')}
       ${createCheckbox('evaluationBreakdownEnabled', 'Afficher la répartition des évaluations', 'Affiche le détail des évaluations Excellent, Bien, Juste et Pauvre à côté du score')}
       ${createCheckbox('targetPercentageEnabled', 'Afficher le nombre d\'avis nécessaires pour atteindre un % cible', 'Affiche le nombre d\'avis qu\'il va être nécessaire de faire pour atteindre le % défini')}
+      ${createCheckbox('hideHighlightedReviewsEnabled', 'Cacher l\'encadré "Avis en évidence"', 'Masque le carrousel des avis mis en évidence sur la page Compte pour gagner de la place')}
       ${createCheckbox('pageEnabled', 'Affichage des pages en partie haute', 'En plus des pages de navigation en partie basse, ajoute également la navigation des pages en haut')}
       ${createCheckbox('emailEnabled', 'Génération automatique des emails', 'Permet de générer automatiquement des mails à destination du support vine pour faire retirer un produit de votre liste d\'avis. Attention, on ne peut générer un mail que si le produit a été vu au moins une fois dans la liste de l\'onglet "Commandes"')}
       ${createCheckbox('profilEnabled', 'Mise en avant des avis avec des votes utiles sur les profils Amazon','Surligne de la couleur définie les avis ayant un vote utile ou plus. Il est également mis en début de page. Le surlignage ne fonctionne pas si l\'avis possède des photos')}
@@ -1373,7 +1374,7 @@
         function changeColor() {
             if (document.URL === "https://www.amazon.fr/vine/account") {
                 const progressBar = document.querySelector('#vvp-perc-reviewed-metric-display .animated-progress-bar span')
-                || document.querySelector('#vvp-perc-reviewed-metric-display .animated-progress span');
+                    || document.querySelector('#vvp-perc-reviewed-metric-display .animated-progress span');
 
                 if (!progressBar) {
                     return;
@@ -1414,11 +1415,11 @@
                 //console.log("Date précédente :", previousDate);
 
                 const progressText = document.querySelector('#vvp-perc-reviewed-metric-display .a-size-extra-large')
-                || document.querySelector('#vvp-perc-reviewed-metric-display p strong');
+                    || document.querySelector('#vvp-perc-reviewed-metric-display p strong');
                 const progressContainer = document.querySelector('#vvp-perc-reviewed-metric-display .animated-progress-bar')
-                || document.querySelector('#vvp-perc-reviewed-metric-display .animated-progress');
+                    || document.querySelector('#vvp-perc-reviewed-metric-display .animated-progress');
                 const metricsBox = document.querySelector('#vvp-vine-account-details-box .a-box-inner')
-                || document.querySelector('#vvp-vine-activity-metrics-box .a-box-inner');
+                    || document.querySelector('#vvp-vine-activity-metrics-box .a-box-inner');
 
                 if (metricsBox) {
                     //Augmenter dynamiquement la hauteur du bloc des métriques
@@ -1574,9 +1575,9 @@
                 //Extraction des données de la page
                 function extractData() {
                     const percentageTextElement = document.querySelector('#vvp-perc-reviewed-metric-display .a-size-extra-large')
-                    || document.querySelector('#vvp-perc-reviewed-metric-display p strong');
+                        || document.querySelector('#vvp-perc-reviewed-metric-display p strong');
                     const articlesTextElement = document.querySelector('#vvp-num-reviewed-metric-display .a-size-extra-large')
-                    || document.querySelector('#vvp-num-reviewed-metric-display p strong');
+                        || document.querySelector('#vvp-num-reviewed-metric-display p strong');
 
                     const percentageText = percentageTextElement ? percentageTextElement.innerText : '0';
                     const articlesText = articlesTextElement ? articlesTextElement.innerText : '0';
@@ -1632,7 +1633,7 @@
 
                 function centerContentVertically() {
                     const metricsBox = document.querySelector('#vvp-vine-account-details-box .a-box-inner')
-                    || document.querySelector('#vvp-vine-activity-metrics-box .a-box-inner');
+                        || document.querySelector('#vvp-vine-activity-metrics-box .a-box-inner');
                     if (metricsBox) {
                         metricsBox.style.display = 'flex';
                         metricsBox.style.flexDirection = 'column';
@@ -1648,6 +1649,34 @@
                     }
                 }
             }
+        }
+
+        function hideHighlightedReviews() {
+            if (!document.URL.startsWith("https://www.amazon.fr/vine/account")) {
+                return;
+            }
+
+            let attempts = 0;
+            const maxAttempts = 10;
+
+            const attemptHide = () => {
+                const highlightedCarousel = document.getElementById('vvp-rotw-carousel');
+                if (highlightedCarousel) {
+                    const previousElement = highlightedCarousel.previousElementSibling;
+                    if (previousElement && previousElement.tagName === 'HR') {
+                        previousElement.style.display = 'none';
+                    }
+                    highlightedCarousel.style.display = 'none';
+                    return;
+                }
+
+                if (attempts < maxAttempts) {
+                    attempts += 1;
+                    setTimeout(attemptHide, 500);
+                }
+            };
+
+            attemptHide();
         }
 
         //Fonction pour formater une date en format 'DD/MM/YYYY'
@@ -2414,6 +2443,7 @@
         var lastUpdateEnabled = localStorage.getItem('lastUpdateEnabled');
         var evaluationBreakdownEnabled = localStorage.getItem('evaluationBreakdownEnabled');
         var targetPercentageEnabled = localStorage.getItem('targetPercentageEnabled');
+        var hideHighlightedReviewsEnabled = localStorage.getItem('hideHighlightedReviewsEnabled');
         var autoSaveEnabled = localStorage.getItem('autoSaveEnabled');
 
         //Initialiser à true si la clé n'existe pas dans le stockage local
@@ -2479,6 +2509,11 @@
             localStorage.setItem('doFireWorks', 'true');
         }
 
+        if (hideHighlightedReviewsEnabled === null) {
+            hideHighlightedReviewsEnabled = 'false';
+            localStorage.setItem('hideHighlightedReviewsEnabled', hideHighlightedReviewsEnabled);
+        }
+
         if (autoSaveEnabled === null) {
             autoSaveEnabled = 'true';
             localStorage.setItem('autoSaveEnabled', autoSaveEnabled);
@@ -2526,6 +2561,10 @@
 
         if (targetPercentageEnabled === 'true') {
             targetPercentage();
+        }
+
+        if (hideHighlightedReviewsEnabled === 'true') {
+            hideHighlightedReviews();
         }
 
         if (autoSaveEnabled === 'true') {
@@ -2716,113 +2755,14 @@
         }
 
         window.addEventListener('load', function () {
-
-            if (document.URL !== "https://www.amazon.fr/vine/account") {
-                return;
-            }
-
-            if (!document.getElementById('rr-compact-metrics-style')) {
-                const style = document.createElement('style');
-                style.id = 'rr-compact-metrics-style';
-                style.textContent = `
-            #vvp-vine-account-details-box .a-box-inner,
-            #vvp-vine-activity-metrics-box .a-box-inner {
-                padding: 8px 10px !important;
-            }
-
-            #vvp-vine-account-details-box .a-scroller,
-            #vvp-vine-activity-metrics-box .a-scroller {
-                padding: 0 !important;
-            }
-
-            #vvp-vine-account-details-box .metrics-display,
-            #vvp-vine-activity-metrics-box .metrics-display {
-                display: flex;
-                flex-direction: column;
-                gap: 4px;
-            }
-
-            #vvp-vine-account-details-box .metrics-display p,
-            #vvp-vine-activity-metrics-box .metrics-display p {
-                margin: 2px 0;
-                line-height: 1.25;
-            }
-
-            #vvp-vine-account-details-box .metrics-display hr,
-            #vvp-vine-activity-metrics-box .metrics-display hr {
-                margin: 6px 0;
-            }
-
-            #vvp-vine-account-details-box .review-todo,
-            #vvp-vine-activity-metrics-box .review-todo,
-            #vvp-vine-account-details-box .rr-evaluation-breakdown,
-            #vvp-vine-activity-metrics-box .rr-evaluation-breakdown,
-            #vvp-vine-account-details-box .last-modification,
-            #vvp-vine-activity-metrics-box .last-modification {
-                margin-top: 4px !important;
-                line-height: 1.25;
-            }
-
-            #vvp-vine-account-details-box .metrics-display p:empty,
-            #vvp-vine-activity-metrics-box .metrics-display p:empty,
-            #vvp-vine-account-details-box .metrics-display p:empty + br,
-            #vvp-vine-activity-metrics-box .metrics-display p:empty + br,
-            #vvp-vine-account-details-box .a-ws-row > .a-column > p:empty,
-            #vvp-vine-activity-metrics-box .a-ws-row > .a-column > p:empty,
-            #vvp-vine-account-details-box .a-ws-row > .a-column > br,
-            #vvp-vine-activity-metrics-box .a-ws-row > .a-column > br {
-                display: none !important;
-            }
-
-            #vvp-vine-account-details-box .status-bar,
-            #vvp-vine-activity-metrics-box .status-bar,
-            #vvp-vine-account-details-box .animated-progress-bar,
-            #vvp-vine-activity-metrics-box .animated-progress-bar {
-                margin: 2px 0;
-            }
-            `;
-
-                document.head.appendChild(style);
-
-
-                //Déplacement "Testeur Vine depuis..."
-                (function rrMoveVineSince() {
-                    const strong = [...document.querySelectorAll('p.a-nowrap strong')]
-                    .find(s => (s.textContent || '').trim().startsWith('Testeur Vine depuis'));
-                    if (!strong) {
-                        setTimeout(rrMoveVineSince, 250);
-                        return;
-                    }
-
-                    const p = strong.closest('p');
-                    if (!p || p.dataset.rrMoved === '2') {
-                        return;
-                    }
-
-                    //Colonne "Mon statut Vine" (celle qui contient le titre)
-                    const titleNode = [...document.querySelectorAll('#vvp-vine-account-details-box .a-row.a-size-extra-large')]
-                    .find(el => (el.textContent || '').trim() === 'Mon statut Vine');
-                    const statusCol = titleNode ? titleNode.closest('.a-column') : null;
-
-                    if (!statusCol) {
-                        setTimeout(rrMoveVineSince, 250);
-                        return;
-                    }
-
-                    p.dataset.rrMoved = '2';
-                    p.style.marginTop = '8px';
-                    statusCol.appendChild(p);
-                })();
-            }
-
             //Active le bouton de téléchargement du rapport
             var element = document.querySelector('.vvp-tax-report-file-type-select-container.download-disabled');
             if (element) {
                 element.classList.remove('download-disabled');
             }
 
-            //Ajoute l'heure de l'évaluation (obsolète)
-            /*const timeStampElementEnd = document.getElementById('vvp-eval-end-stamp');
+            //Ajoute l'heure de l'évaluation
+            const timeStampElementEnd = document.getElementById('vvp-eval-end-stamp');
             const timeStampElementJoin = document.getElementById('vvp-join-vine-stamp');
             //const timeStampElementEnd = document.getElementById('vvp-eval-end-stamp');
             const timeStampEnd = timeStampElementEnd ? timeStampElementEnd.textContent : null;
@@ -2850,7 +2790,7 @@
                 if (dateStringElement) {
                     dateStringElement.innerHTML = `Membre depuis&nbsp;: <strong>${formattedDate}</strong>`;
                 }
-            }*/
+            }
 
             //Suppression du bouton pour se désincrire
             var elem = document.getElementById('vvp-opt-out-of-vine-button');
