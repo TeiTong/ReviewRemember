@@ -1112,7 +1112,6 @@
       ${createCheckbox('autoSaveEnabled', 'Sauvegarde automatique des avis', 'Les avis sont sauvegardés dès que vous cliquez sur "Envoyer" sans avoir besoin de l\'enregistrer avant')}
       ${createCheckbox('enableDateFunction', 'Surligner le statut des avis', 'Change la couleur du "Statut du commentaire" dans vos avis "En attente de vérification" en fonction de leur date d\'ancienneté. Entre 0 et 6 jours -> Bleu, 7 à 13 jours -> Vert, 14 à 29 jours -> Orange, plus de 30 jours -> Rouge')}
       ${createCheckbox('enableReviewStatusFunction', 'Surligner les avis vérifiés', 'Change la couleur du "Statut du commentaire" dans vos avis "Vérifiées" en fonction de leur statut actuel (Approuvé, Non approuvé, etc...)')}
-      ${createCheckbox('enableColorFunction', 'Changer la couleur de la barre de progression des avis', 'Change la couleur de la barre de progression des avis sur la page "Compte". Entre 0 et 59% -> Rouge, 60 à 89% -> Orange et supérieur à 90% -> Vert')}
       ${createCheckbox('filterEnabled', 'Cacher les avis approuvés', 'Dans l\'onglet "Vérifiées" de vos avis, si l\'avis  est Approuvé, alors il est caché')}
       ${createCheckbox('hidePendingEnabled', 'Pouvoir cacher les avis "En attente de vérification"')}
       ${createCheckbox('lastUpdateEnabled', 'Afficher la date de la dernière modification du % d\'avis', 'Indique la date de la dernière modification du % des avis sur le compte')}
