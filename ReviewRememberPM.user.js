@@ -1,7 +1,7 @@
 //==UserScript==
 // @name         ReviewRememberPM
 // @namespace    http://tampermonkey.net/
-// @version      1.10.0
+// @version      1.10.1
 // @description  Outils pour les avis Amazon (version PickMe)
 // @author       Créateur/Codeur principal : MegaMan / Codeur secondaire : Sulff
 // @icon         https://vinepick.me/img/RR-ICO-2.png
@@ -25,7 +25,7 @@
     //A retirer plus tard, pour ne plus avoir l'alerte de RR à mettre à jour
     localStorage.setItem('useRR', '0');
 
-    var versionRR = "1.10.0";
+    var versionRR = "1.10.1";
 
     const baseUrlPickme = "https://vinepick.me";
 
@@ -155,14 +155,14 @@
             for (let i = 1; i < lines.length; i++) {
                 if (lines[i]) {
                     const columns = lines[i].split(';');
-                    if (columns.length >= 6) {
-                        const date = columns[0].trim();
-                        const type = columns[1].trim();
-                        const name = columns[2].trim();
-                        const asin = columns[3].trim();
-                        const title = columns[4].trim();
-                        const review = columns[5].trim().replace(/\\n/g, '\n');
-                        const evaluation = (columns[6] || '').trim();
+                    if (columns.length >= 5) {
+                        const date = (columns[0] || '').trim();
+                        const type = (columns[1] || '').trim();
+                        const name = (columns[2] || '').trim();
+                        const asin = (columns[3] || '').trim();
+                        const evaluation = (columns[4] || '').trim();
+                        const title = (columns[5] || '').trim();
+                        const review = (columns[6] || '').trim().replace(/\\n/g, '\n');
 
                         if (type === "Avis") {
                             const reviewData = { title, review, date };
@@ -1687,6 +1687,17 @@
                     };
                 }
 
+                function formatPercentage(value, decimals = 1) {
+                    if (!Number.isFinite(value)) {
+                        return '0';
+                    }
+                    const rounded = Number(value.toFixed(decimals));
+                    if (Number.isInteger(rounded)) {
+                        return rounded.toString();
+                    }
+                    return rounded.toFixed(decimals);
+                }
+
                 function computeAverageScore(evaluationStats) {
                     const scoreWeights = {
                         Excellent: 100,
@@ -1710,6 +1721,19 @@
                     }
 
                     return weightedSum / totalCount;
+                }
+
+                function formatAverageScoreText(score) {
+                    if (score === null) {
+                        return 'N/A';
+                    }
+
+                    const roundedScore = Math.round(score * 10) / 10;
+                    if (Number.isInteger(roundedScore)) {
+                        return String(Math.trunc(roundedScore));
+                    }
+
+                    return roundedScore.toFixed(1);
                 }
 
                 function updateDateTimeElement(containerElement, dateTime, differenceText = '', differenceColor = '', evaluationStats = { stats: {}, totalEvaluated: 0, ratingOrder: [] }, showBreakdown = true, showLastUpdate = true) {
@@ -1761,7 +1785,7 @@
                             : 'Période actuelle';
 
                             const lines = [];
-                            const scoreText = averageScore !== null ? `${averageScore.toFixed(1)}/100` : 'N/A';
+                            const scoreText = averageScore !== null ? `${formatAverageScoreText(averageScore)}/100` : 'N/A';
 
                             lines.push('📊 Bilan des évaluations');
                             lines.push('');
@@ -1777,10 +1801,10 @@
                             lines.push('📌 Répartition');
 
                             const emojiByRating = {
-                                Excellent: '✅',
-                                Bien: '👍',
-                                Juste: '⚠️',
-                                Pauvre: '❌'
+                                Excellent: '🟦',
+                                Bien: '🟩',
+                                Juste: '🟧',
+                                Pauvre: '🟥'
                             };
 
                             (evaluationStats.ratingOrder && evaluationStats.ratingOrder.length
@@ -1788,9 +1812,10 @@
                              : ['Excellent', 'Bien', 'Juste', 'Pauvre']
                             ).forEach(rating => {
                                 const count = evaluationStats.stats && evaluationStats.stats[rating] ? evaluationStats.stats[rating] : 0;
-                                const percentage = evaluationStats.totalEvaluated > 0
-                                ? ((count / evaluationStats.totalEvaluated) * 100).toFixed(1)
-                                : '0.0';
+                                const percentageValue = evaluationStats.totalEvaluated > 0
+                                ? (count / evaluationStats.totalEvaluated) * 100
+                                : 0;
+                                const percentage = formatPercentage(percentageValue);
                                 const emoji = emojiByRating[rating] || '•';
 
                                 //gras uniquement sur le pourcentage (et pas sur rating + count)
@@ -1799,7 +1824,7 @@
 
                             const pendingCount = evaluationStats.pendingCount || 0;
                             lines.push('');
-                            lines.push(`⏳ En attente : **${pendingCount}**`);
+                            lines.push(`⬜ En attente : **${pendingCount}**`);
                             lines.push(`Total évaluées : **${evaluationStats.totalEvaluated}**`);
 
                             return lines.join('\n');
@@ -1933,7 +1958,8 @@
 
                         const breakdownItems = (evaluationStats.ratingOrder && evaluationStats.ratingOrder.length ? evaluationStats.ratingOrder : ['Excellent', 'Bien', 'Juste', 'Pauvre']).map(rating => {
                             const count = evaluationStats.stats && evaluationStats.stats[rating] ? evaluationStats.stats[rating] : 0;
-                            const percentage = evaluationStats.totalEvaluated > 0 ? ((count / evaluationStats.totalEvaluated) * 100).toFixed(1) : '0.0';
+                            const percentageValue = evaluationStats.totalEvaluated > 0 ? (count / evaluationStats.totalEvaluated) * 100 : 0;
+                            const percentage = formatPercentage(percentageValue);
                             const colorSquare = ratingColorMap[rating] || '⬜';
                             return `${colorSquare} <strong>${rating}</strong> : ${percentage}% (${count})`;
                         });
@@ -1950,7 +1976,7 @@
                         const scoreInfoText = "Ce score reste une simple estimation, mais la perspicacité moyenne peut probablement être lu ainsi :\n\n- 75 à 100 : Excellent\n- 50 à 74 : Bon\n- 25 à 49 : Passable\n- 0 à 24 : Mauvais\n\nElle ne comprend que les avis qui sont en mémoire (après un scan ou avoir parcouru les pages des avis vérifiés). Le score affichait par Amazon peut varier de ce score car nous ne connaissons pas le calcul exact, et il peut également prendre en compte des évaluations qui ne sont pas encore en mémoire ou également mettre un certain délai à s'actualiser.";
                         const scoreElement = document.createElement('div');
                         scoreElement.style.marginTop = '6px';
-                        const scoreText = averageScore !== null ? `${averageScore.toFixed(1)} / 100` : 'N/A';
+                        const scoreText = averageScore !== null ? `${formatAverageScoreText(averageScore)} / 100` : 'N/A';
 
                         const scoreLabel = document.createElement('strong');
                         scoreLabel.textContent = 'Score moyen :';
