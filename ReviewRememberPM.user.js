@@ -1698,11 +1698,11 @@
                     return rounded.toFixed(decimals);
                 }
 
-                function computeAverageScore(evaluationStats) {
-                    const scoreWeights = {
-                        Excellent: 100,
-                        Bien: 74,
-                        Juste: 49,
+    function computeAverageScore(evaluationStats) {
+        const scoreWeights = {
+            Excellent: 100,
+            Bien: 74,
+            Juste: 49,
                         Pauvre: 0
                     };
 
@@ -1720,26 +1720,190 @@
                         return null;
                     }
 
-                    return weightedSum / totalCount;
+        return weightedSum / totalCount;
+    }
+
+    function formatAverageScoreText(score) {
+        if (score === null) {
+            return 'N/A';
+        }
+
+        const roundedScore = Math.round(score * 10) / 10;
+        if (Number.isInteger(roundedScore)) {
+            return String(Math.trunc(roundedScore));
+        }
+
+        return roundedScore.toFixed(1);
+    }
+
+    let lastEvaluationContext = null;
+    let lastEvaluationStats = null;
+    let lastEvaluationToggleTime = 0;
+
+    function buildShareText(evaluationStats, averageScore = computeAverageScore(evaluationStats)) {
+        const modeLabelText =
+              evaluationStats.mode === 'all' || !evaluationStats.isPeriodFilterActive
+        ? 'Toutes les évaluations'
+        : 'Période actuelle';
+
+        const lines = [];
+        const scoreText = averageScore !== null ? `${formatAverageScoreText(averageScore)}/100` : 'N/A';
+
+        lines.push('📊 Bilan des évaluations');
+        lines.push('');
+        lines.push(`Score moyen (${modeLabelText}) : **${scoreText}**`);
+
+        if (evaluationStats.isPeriodFilterActive && evaluationStats.periodStart !== null && evaluationStats.periodEnd !== null) {
+            const startLabel = formatTimestampToDate(evaluationStats.periodStart);
+            const endLabel = formatTimestampToDate(evaluationStats.periodEnd);
+            lines.push(`🗓️ Période : du ${startLabel} au ${endLabel}`);
+        }
+
+        lines.push('');
+        lines.push('📌 Répartition');
+
+        const emojiByRating = {
+            Excellent: '🟦',
+            Bien: '🟩',
+            Juste: '🟧',
+            Pauvre: '🟥'
+        };
+
+        (evaluationStats.ratingOrder && evaluationStats.ratingOrder.length
+         ? evaluationStats.ratingOrder
+         : ['Excellent', 'Bien', 'Juste', 'Pauvre']
+        ).forEach(rating => {
+            const count = evaluationStats.stats && evaluationStats.stats[rating] ? evaluationStats.stats[rating] : 0;
+            const percentageValue = evaluationStats.totalEvaluated > 0
+            ? (count / evaluationStats.totalEvaluated) * 100
+            : 0;
+            const percentage = formatPercentage(percentageValue);
+            const emoji = emojiByRating[rating] || '•';
+
+            lines.push(`${emoji} ${rating} : **${percentage}%** (${count})`);
+        });
+
+        const pendingCount = evaluationStats.pendingCount || 0;
+        lines.push('');
+        lines.push(`⬜ En attente : **${pendingCount}**`);
+        lines.push(`Total évaluées : **${evaluationStats.totalEvaluated}**`);
+
+        return lines.join('\n');
+    }
+
+    async function copyShareText(text) {
+        const handleSuccess = () => {
+            alert('Statistiques copiées dans le presse-papiers.');
+        };
+        const handleFallback = () => {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.top = '0';
+            textarea.style.left = '0';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    handleSuccess();
+                } else {
+                    alert('Impossible de copier les statistiques.');
                 }
+            } catch (error) {
+                console.error('[ReviewRemember] Échec de la copie des statistiques :', error);
+                alert('Impossible de copier les statistiques.');
+            }
+            document.body.removeChild(textarea);
+        };
 
-                function formatAverageScoreText(score) {
-                    if (score === null) {
-                        return 'N/A';
-                    }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            try {
+                await navigator.clipboard.writeText(text);
+                handleSuccess();
+                return;
+            } catch (error) {
+                console.error('[ReviewRemember] Échec de la copie avec l’API Clipboard :', error);
+            }
+        }
+        handleFallback();
+    }
 
-                    const roundedScore = Math.round(score * 10) / 10;
-                    if (Number.isInteger(roundedScore)) {
-                        return String(Math.trunc(roundedScore));
-                    }
+    function refreshEvaluationBreakdown(modeOverride = null) {
+        if (!lastEvaluationContext || !lastEvaluationContext.containerElement) {
+            return;
+        }
+        const targetMode = modeOverride || getEvaluationBreakdownMode();
+        const updatedStats = computeEvaluationStats(targetMode);
+        updateDateTimeElement(
+            lastEvaluationContext.containerElement,
+            lastEvaluationContext.dateTime,
+            lastEvaluationContext.differenceText,
+            lastEvaluationContext.differenceColor,
+            updatedStats,
+            lastEvaluationContext.showBreakdown,
+            lastEvaluationContext.showLastUpdate
+        );
+    }
 
-                    return roundedScore.toFixed(1);
-                }
+    function handleEvaluationBreakdownAction(event) {
+        const target = event.target;
+        if (!target) {
+            return;
+        }
 
-                function updateDateTimeElement(containerElement, dateTime, differenceText = '', differenceColor = '', evaluationStats = { stats: {}, totalEvaluated: 0, ratingOrder: [] }, showBreakdown = true, showLastUpdate = true) {
-                    if (!showBreakdown && !showLastUpdate) {
-                        return;
-                    }
+        const toggle = target.closest('.rr-evaluation-toggle');
+        const share = toggle ? null : target.closest('.rr-evaluation-share');
+
+        if (!toggle && !share) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (!lastEvaluationContext) {
+            return;
+        }
+
+        if (toggle) {
+            const now = Date.now();
+            if (now - lastEvaluationToggleTime < 300) {
+                return;
+            }
+            lastEvaluationToggleTime = now;
+            const currentMode = getEvaluationBreakdownMode();
+            const nextMode = currentMode === 'all' ? 'current' : 'all';
+            localStorage.setItem('evaluationBreakdownMode', nextMode);
+            refreshEvaluationBreakdown(nextMode);
+            return;
+        }
+
+        const stats = computeEvaluationStats(getEvaluationBreakdownMode());
+        const shareText = buildShareText(stats, computeAverageScore(stats));
+        copyShareText(shareText);
+    }
+
+    ['click', 'touchend'].forEach(eventName => {
+        document.addEventListener(eventName, handleEvaluationBreakdownAction, { capture: true, passive: false });
+    });
+
+    function updateDateTimeElement(containerElement, dateTime, differenceText = '', differenceColor = '', evaluationStats = { stats: {}, totalEvaluated: 0, ratingOrder: [] }, showBreakdown = true, showLastUpdate = true) {
+        if (!showBreakdown && !showLastUpdate) {
+            return;
+        }
+
+        lastEvaluationContext = {
+            containerElement,
+            dateTime,
+            differenceText,
+            differenceColor,
+            showBreakdown,
+            showLastUpdate
+        };
+        lastEvaluationStats = evaluationStats;
 
                     //Supprimer l'élément de date précédent s'il existe
                     let previousDateTimeElement = document.querySelector('.last-modification');
@@ -1778,98 +1942,6 @@
                         breakdownElement.style.marginTop = '8px';
                         const averageScore = computeAverageScore(evaluationStats);
 
-                        const buildShareText = () => {
-                            const modeLabelText =
-                                  evaluationStats.mode === 'all' || !evaluationStats.isPeriodFilterActive
-                            ? 'Toutes les évaluations'
-                            : 'Période actuelle';
-
-                            const lines = [];
-                            const scoreText = averageScore !== null ? `${formatAverageScoreText(averageScore)}/100` : 'N/A';
-
-                            lines.push('📊 Bilan des évaluations');
-                            lines.push('');
-                            lines.push(`Score moyen (${modeLabelText}) : **${scoreText}**`);
-
-                            if (evaluationStats.isPeriodFilterActive && evaluationStats.periodStart !== null && evaluationStats.periodEnd !== null) {
-                                const startLabel = formatTimestampToDate(evaluationStats.periodStart);
-                                const endLabel = formatTimestampToDate(evaluationStats.periodEnd);
-                                lines.push(`🗓️ Période : du ${startLabel} au ${endLabel}`);
-                            }
-
-                            lines.push('');
-                            lines.push('📌 Répartition');
-
-                            const emojiByRating = {
-                                Excellent: '🟦',
-                                Bien: '🟩',
-                                Juste: '🟧',
-                                Pauvre: '🟥'
-                            };
-
-                            (evaluationStats.ratingOrder && evaluationStats.ratingOrder.length
-                             ? evaluationStats.ratingOrder
-                             : ['Excellent', 'Bien', 'Juste', 'Pauvre']
-                            ).forEach(rating => {
-                                const count = evaluationStats.stats && evaluationStats.stats[rating] ? evaluationStats.stats[rating] : 0;
-                                const percentageValue = evaluationStats.totalEvaluated > 0
-                                ? (count / evaluationStats.totalEvaluated) * 100
-                                : 0;
-                                const percentage = formatPercentage(percentageValue);
-                                const emoji = emojiByRating[rating] || '•';
-
-                                //gras uniquement sur le pourcentage (et pas sur rating + count)
-                                lines.push(`${emoji} ${rating} : **${percentage}%** (${count})`);
-                            });
-
-                            const pendingCount = evaluationStats.pendingCount || 0;
-                            lines.push('');
-                            lines.push(`⬜ En attente : **${pendingCount}**`);
-                            lines.push(`Total évaluées : **${evaluationStats.totalEvaluated}**`);
-
-                            return lines.join('\n');
-                        };
-
-                        const copyShareText = async (text) => {
-                            const handleSuccess = () => {
-                                alert('Statistiques copiées dans le presse-papiers.');
-                            };
-                            const handleFallback = () => {
-                                const textarea = document.createElement('textarea');
-                                textarea.value = text;
-                                textarea.style.position = 'fixed';
-                                textarea.style.top = '0';
-                                textarea.style.left = '0';
-                                textarea.style.opacity = '0';
-                                document.body.appendChild(textarea);
-                                textarea.focus();
-                                textarea.select();
-                                try {
-                                    const successful = document.execCommand('copy');
-                                    if (successful) {
-                                        handleSuccess();
-                                    } else {
-                                        alert('Impossible de copier les statistiques.');
-                                    }
-                                } catch (error) {
-                                    console.error('[ReviewRemember] Échec de la copie des statistiques :', error);
-                                    alert('Impossible de copier les statistiques.');
-                                }
-                                document.body.removeChild(textarea);
-                            };
-
-                            if (navigator.clipboard && navigator.clipboard.writeText) {
-                                try {
-                                    await navigator.clipboard.writeText(text);
-                                    handleSuccess();
-                                    return;
-                                } catch (error) {
-                                    console.error('[ReviewRemember] Échec de la copie avec l’API Clipboard :', error);
-                                }
-                            }
-                            handleFallback();
-                        };
-
                         const breakdownHeader = document.createElement('div');
                         breakdownHeader.className = 'rr-evaluation-breakdown-header';
                         breakdownHeader.style.display = 'flex';
@@ -1899,7 +1971,7 @@
 
                         const toggleButton = document.createElement('button');
                         toggleButton.type = 'button';
-                        toggleButton.className = 'a-button a-button-base a-button-mini';
+                        toggleButton.className = 'a-button a-button-base a-button-mini rr-evaluation-toggle';
                         toggleButton.style.padding = '2px 8px';
                         toggleButton.style.lineHeight = '1.4';
                         toggleButton.style.whiteSpace = 'nowrap';
@@ -1907,42 +1979,16 @@
                         toggleButton.title = evaluationStats.mode === 'all'
                             ? 'Afficher uniquement les évaluations de la période actuelle'
                         : 'Afficher toutes les évaluations enregistrées';
-                        let lastToggleTime = 0;
-                        const handleToggle = (event) => {
-                            if (event) {
-                                event.preventDefault();
-                                event.stopPropagation();
-                            }
-                            const now = Date.now();
-                            if (now - lastToggleTime < 300) {
-                                return;
-                            }
-                            lastToggleTime = now;
-                            const nextMode = evaluationStats.mode === 'all' ? 'current' : 'all';
-                            localStorage.setItem('evaluationBreakdownMode', nextMode);
-                            const updatedStats = computeEvaluationStats(nextMode);
-                            updateDateTimeElement(containerElement, dateTime, differenceText, differenceColor, updatedStats, showBreakdown, showLastUpdate);
-                        };
-                        toggleButton.addEventListener('click', handleToggle);
-                        toggleButton.addEventListener('touchend', handleToggle, { passive: false });
                         actionButtons.appendChild(toggleButton);
 
                         const shareButton = document.createElement('button');
                         shareButton.type = 'button';
-                        shareButton.className = 'a-button a-button-base a-button-mini';
+                        shareButton.className = 'a-button a-button-base a-button-mini rr-evaluation-share';
                         shareButton.style.padding = '2px 8px';
                         shareButton.style.lineHeight = '1.4';
                         shareButton.style.whiteSpace = 'nowrap';
                         shareButton.textContent = 'Partager';
                         shareButton.title = 'Copier le score moyen et la répartition pour Discord';
-                        const handleShare = (event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            const shareText = buildShareText();
-                            copyShareText(shareText);
-                        };
-                        shareButton.addEventListener('click', handleShare);
-                        shareButton.addEventListener('touchend', handleShare, { passive: false });
                         actionButtons.appendChild(shareButton);
 
                         breakdownHeader.appendChild(actionButtons);
