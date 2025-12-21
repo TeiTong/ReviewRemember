@@ -1,7 +1,7 @@
 //==UserScript==
 // @name         ReviewRememberPM
 // @namespace    http://tampermonkey.net/
-// @version      1.10.2
+// @version      1.10.1
 // @description  Outils pour les avis Amazon (version PickMe)
 // @author       Créateur/Codeur principal : MegaMan / Codeur secondaire : Sulff
 // @icon         https://vinepick.me/img/RR-ICO-2.png
@@ -25,7 +25,7 @@
     //A retirer plus tard, pour ne plus avoir l'alerte de RR à mettre à jour
     localStorage.setItem('useRR', '0');
 
-    var versionRR = "1.10.2";
+    var versionRR = "1.10.1";
 
     const baseUrlPickme = "https://vinepick.me";
 
@@ -3651,42 +3651,6 @@
         if (lastUpdateEnabled === 'true' || evaluationBreakdownEnabled === 'true') {
             lastUpdate(lastUpdateEnabled === 'true', evaluationBreakdownEnabled === 'true');
         }
-
-        //Réapplique les éléments de la page Compte quand Amazon reconstruit le bloc
-        let accountObserver = null;
-        let lastAccountRefresh = 0;
-        function refreshAccountWidgets() {
-            if (lastUpdateEnabled === 'true' || evaluationBreakdownEnabled === 'true') {
-                lastUpdate(lastUpdateEnabled === 'true', evaluationBreakdownEnabled === 'true');
-            }
-            if (targetPercentageEnabled === 'true') {
-                targetPercentage();
-            }
-        }
-        function watchAccountSection() {
-            if (!document.URL.startsWith("https://www.amazon.fr/vine/account")) {
-                return;
-            }
-            const container = document.querySelector('#vvp-vine-account-details-box');
-            if (!container) {
-                setTimeout(watchAccountSection, 300);
-                return;
-            }
-            refreshAccountWidgets();
-            if (accountObserver) {
-                return;
-            }
-            accountObserver = new MutationObserver(() => {
-                const now = Date.now();
-                if (now - lastAccountRefresh < 300) {
-                    return;
-                }
-                lastAccountRefresh = now;
-                refreshAccountWidgets();
-            });
-            accountObserver.observe(container, { childList: true, subtree: true });
-        }
-        watchAccountSection();
 
         if (targetPercentageEnabled === 'true') {
             targetPercentage();
