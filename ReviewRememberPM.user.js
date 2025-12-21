@@ -1877,7 +1877,7 @@
                         breakdownHeader.style.alignItems = 'center';
                         breakdownHeader.style.columnGap = '8px';
                         breakdownHeader.style.rowGap = '6px';
-                        breakdownHeader.style.flexWrap = 'wrap';
+                        breakdownHeader.style.flexWrap = 'wrap-reverse';
                         breakdownHeader.style.marginBottom = '4px';
 
                         const modeLabel = document.createElement('span');
