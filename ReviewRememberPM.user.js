@@ -1,7 +1,7 @@
 //==UserScript==
 // @name         ReviewRememberPM
 // @namespace    http://tampermonkey.net/
-// @version      1.9.10
+// @version      1.10.0
 // @description  Outils pour les avis Amazon (version PickMe)
 // @author       Créateur/Codeur principal : MegaMan / Codeur secondaire : Sulff
 // @icon         https://vinepick.me/img/RR-ICO-2.png
@@ -25,7 +25,7 @@
     //A retirer plus tard, pour ne plus avoir l'alerte de RR à mettre à jour
     localStorage.setItem('useRR', '0');
 
-    var versionRR = "1.9.10";
+    var versionRR = "1.10.0";
 
     const baseUrlPickme = "https://vinepick.me";
 
@@ -54,6 +54,45 @@
         return urlParams.get('asin');
     }
 
+    //Analyse une date JJ/MM/AAAA ou avec mois en français
+    function parseDDMMYYYYFlexible(s) {
+        const txt = (s || '').toString().replace(/\u00a0/g, ' ').trim();
+
+        let m = txt.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+        if (m) {
+            const dd = Number(m[1]), mm = Number(m[2]), yyyy = Number(m[3]);
+            if (dd >= 1 && dd <= 31 && mm >= 1 && mm <= 12 && yyyy >= 2000 && yyyy <= 2100) {
+                const dt = new Date(yyyy, mm - 1, dd);
+                const ts = dt.getTime();
+                if (Number.isFinite(ts)) {
+                    return { ts: dt.setHours(0, 0, 0, 0), str: `${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}/${yyyy}` };
+                }
+            }
+        }
+
+        const months = {
+            'janv':1,'janvier':1,'févr':2,'fevr':2,'février':2,'fevrier':2,'mars':3,'avr':4,'avril':4,
+            'mai':5,'juin':6,'juil':7,'juillet':7,'août':8,'aout':8,'sept':9,'septembre':9,
+            'oct':10,'octobre':10,'nov':11,'novembre':11,'déc':12,'dec':12,'décembre':12,'decembre':12
+        };
+
+        m = txt.match(/(\d{1,2})\s+([a-zA-Zéèêëàâäîïôöûüç\.]+)\s+(\d{4})/);
+        if (!m) return null;
+
+        const dd = Number(m[1]);
+        const monRaw = (m[2] || '').toLowerCase().replace(/\./g, '').trim();
+        const yyyy = Number(m[3]);
+        const mm = months[monRaw];
+
+        if (!mm || !(dd >= 1 && dd <= 31 && yyyy >= 2000 && yyyy <= 2100)) return null;
+
+        const dt = new Date(yyyy, mm - 1, dd);
+        const ts = dt.getTime();
+        if (!Number.isFinite(ts)) return null;
+
+        return { ts: dt.setHours(0, 0, 0, 0), str: `${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}/${yyyy}` };
+    }
+
     //Export des avis
     function exportReviewsToCSV() {
         let csvContent = "\uFEFF"; // BOM pour UTF-8
@@ -74,13 +113,14 @@
             if (key.startsWith('review_') && key !== 'review_templates') {
                 const reviewData = JSON.parse(localStorage.getItem(key));
                 const asin = key.replace('review_', ''); //Extraire l'ASIN
+                const name = reviewData.name ? reviewData.name.replace(/;/g, ',') : '';
                 const title = reviewData.title.replace(/;/g, ','); //Remplacer les ";" par des ","
                 const review = reviewData.review.replace(/\n/g, '\\n');
                 const evaluation = reviewData.evaluation ? reviewData.evaluation.replace(/;/g, ',') : '';
                 const date = reviewData.date || '';
 
                 //Ajouter la ligne pour les avis
-                csvContent += `${date};Avis;;${asin};${evaluation};${title};${review}\n`;
+                csvContent += `${date};Avis;${name};${asin};${evaluation};${title};${review}\n`;
             }
         });
 
@@ -126,7 +166,10 @@
 
                         if (type === "Avis") {
                             const reviewData = { title, review, date };
-                            if (evaluation && evaluation.toLowerCase() !== 'en attente') {
+                            if (name) {
+                                reviewData.name = name;
+                            }
+                            if (evaluation) {
                                 reviewData.evaluation = evaluation;
                             }
                             localStorage.setItem(`review_${asin}`, JSON.stringify(reviewData));
@@ -943,12 +986,31 @@
         }
 
         const asin = getASIN();
-        //Obtenir la date au format JJ/MM/AAAA
-        const now = new Date();
-        const date = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+        const storageKey = `review_${asin}`;
+        const storedValue = localStorage.getItem(storageKey);
+        let existingData = {};
+        if (storedValue) {
+            try {
+                existingData = JSON.parse(storedValue);
+            } catch (error) {
+                console.error("[ReviewRemember] Impossible d'analyser les données existantes pour l'ASIN :", asin, error);
+            }
+        }
+
+        //Obtenir la date au format JJ/MM/AAAA uniquement si aucune date n'est déjà stockée
+        if (!existingData.date) {
+            const now = new Date();
+            existingData.date = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+        }
+
+        const updatedReview = {
+            ...existingData,
+            title,
+            review
+        };
 
         //Sauvegarde dans localStorage
-        localStorage.setItem(`review_${asin}`, JSON.stringify({ title, review, date }));
+        localStorage.setItem(storageKey, JSON.stringify(updatedReview));
         if (!autoSave) {
             const saveButton = this;
             const originalText = saveButton.textContent;
@@ -1402,13 +1464,29 @@
         }
 
         //Affiche la dernière mise a jour du profil
-        function lastUpdate() {
+        function lastUpdate(showLastUpdate = true, showEvaluationBreakdown = true) {
             if (document.URL === "https://www.amazon.fr/vine/account") {
+                const shouldShowLastUpdate = showLastUpdate && lastUpdateEnabled === 'true';
+                const shouldShowEvaluationBreakdown = showEvaluationBreakdown && evaluationBreakdownEnabled === 'true';
+
+                if (!shouldShowLastUpdate && !shouldShowEvaluationBreakdown) {
+                    const previousDateTimeElement = document.querySelector('.last-modification');
+                    if (previousDateTimeElement) {
+                        previousDateTimeElement.remove();
+                    }
+
+                    const previousBreakdown = document.querySelector('.rr-evaluation-breakdown');
+                    if (previousBreakdown) {
+                        previousBreakdown.remove();
+                    }
+
+                    return;
+                }
+
                 //Récupérer le pourcentage et la date précédents depuis le stockage local
                 const previousPercentage = parseFloat(localStorage.getItem('vineProgressPercentage')) || null;
                 const previousDate = localStorage.getItem('vineProgressDate') || null;
-                const showEvaluationBreakdown = evaluationBreakdownEnabled === 'true';
-                const evaluationStats = showEvaluationBreakdown ? computeEvaluationStats() : { stats: {}, totalEvaluated: 0, ratingOrder: [] };
+                const evaluationStats = shouldShowEvaluationBreakdown ? computeEvaluationStats() : { stats: {}, totalEvaluated: 0, ratingOrder: [], pendingCount: 0 };
 
                 //console.log("Pourcentage précédent :", previousPercentage);
                 //console.log("Date précédente :", previousDate);
@@ -1427,6 +1505,11 @@
                 }
 
                 if (progressText && progressContainer) {
+                    if (!shouldShowLastUpdate) {
+                        updateDateTimeElement(progressContainer, '', '', '', evaluationStats, shouldShowEvaluationBreakdown, shouldShowLastUpdate);
+                        return;
+                    }
+
                     const currentPercentageText = progressText.textContent.trim();
                     const currentPercentage = parseFloat(currentPercentageText.replace('%', '').replace(',', '.'));
 
@@ -1452,20 +1535,100 @@
                         //console.log("Nouvelle date stockée :", dateTimeNow);
 
                         //Mettre à jour le texte de progression avec la date et l'heure de la dernière modification
-                        updateDateTimeElement(progressContainer, dateTimeNow, differenceText, differenceColor, evaluationStats, showEvaluationBreakdown);
+                        updateDateTimeElement(progressContainer, dateTimeNow, differenceText, differenceColor, evaluationStats, shouldShowEvaluationBreakdown, shouldShowLastUpdate);
                     } else if (previousDate) {
                         //Si aucune modification détectée, afficher la date et l'heure de la dernière modification
-                        updateDateTimeElement(progressContainer, previousDate, '', '', evaluationStats, showEvaluationBreakdown);
+                        updateDateTimeElement(progressContainer, previousDate, '', '', evaluationStats, shouldShowEvaluationBreakdown, shouldShowLastUpdate);
                     }
                 }
 
-                function computeEvaluationStats() {
+                function formatTimestampToDate(timestamp) {
+                    if (!timestamp || Number.isNaN(timestamp)) {
+                        return '';
+                    }
+
+                    return new Date(timestamp).toLocaleDateString('fr-FR');
+                }
+
+                function parseReviewDateToTimestamp(dateString) {
+                    if (!dateString) {
+                        return null;
+                    }
+
+                    const trimmed = dateString.trim();
+                    const slashMatch = trimmed.match(/^(\d{1,2})[\/\\-](\d{1,2})[\/\\-](\d{2,4})$/);
+                    if (slashMatch) {
+                        const day = parseInt(slashMatch[1], 10);
+                        const month = parseInt(slashMatch[2], 10) - 1;
+                        const year = parseInt(slashMatch[3].length === 2 ? `20${slashMatch[3]}` : slashMatch[3], 10);
+                        const parsedDate = new Date(year, month, day);
+                        return Number.isNaN(parsedDate.getTime()) ? null : parsedDate.getTime();
+                    }
+
+                    const monthMap = {
+                        janvier: 0,
+                        février: 1,
+                        fevrier: 1,
+                        mars: 2,
+                        avril: 3,
+                        mai: 4,
+                        juin: 5,
+                        juillet: 6,
+                        août: 7,
+                        aout: 7,
+                        septembre: 8,
+                        octobre: 9,
+                        novembre: 10,
+                        décembre: 11,
+                        decembre: 11
+                    };
+
+                    const monthMatch = trimmed.match(/^(\d{1,2})\s+([a-zàâçéèêëîïôûùüÿñæœ]+)\s+(\d{4})$/i);
+                    if (monthMatch) {
+                        const day = parseInt(monthMatch[1], 10);
+                        const monthName = monthMatch[2].toLowerCase();
+                        const year = parseInt(monthMatch[3], 10);
+                        const month = monthMap[monthName];
+                        if (month !== undefined) {
+                            const parsedDate = new Date(year, month, day);
+                            return Number.isNaN(parsedDate.getTime()) ? null : parsedDate.getTime();
+                        }
+                    }
+
+                    const parsed = Date.parse(trimmed);
+                    return Number.isNaN(parsed) ? null : parsed;
+                }
+
+                function getEvaluationBreakdownMode() {
+                    const storedMode = localStorage.getItem('evaluationBreakdownMode');
+                    return storedMode === 'all' || storedMode === 'current' ? storedMode : 'current';
+                }
+
+                function getEvaluationPeriodBounds() {
+                    const startElement = document.getElementById('vvp-eval-start-stamp');
+                    const endElement = document.getElementById('vvp-eval-end-stamp');
+
+                    const startStamp = startElement ? parseInt(startElement.textContent, 10) : NaN;
+                    const endStamp = endElement ? parseInt(endElement.textContent, 10) : NaN;
+
+                    return {
+                        periodStart: Number.isNaN(startStamp) ? null : startStamp,
+                        periodEnd: Number.isNaN(endStamp) ? null : endStamp
+                    };
+                }
+
+                function computeEvaluationStats(mode = getEvaluationBreakdownMode()) {
                     const ratingOrder = ['Excellent', 'Bien', 'Juste', 'Pauvre'];
+                    const pendingLabel = 'En attente';
+                    const pendingLabelNormalized = pendingLabel.toLowerCase();
                     const stats = ratingOrder.reduce((acc, rating) => {
                         acc[rating] = 0;
                         return acc;
                     }, {});
                     let totalEvaluated = 0;
+                    let pendingCount = 0;
+                    const { periodStart, periodEnd } = getEvaluationPeriodBounds();
+                    const isPeriodFilterActive = mode === 'current' && periodStart !== null && periodEnd !== null;
 
                     Object.keys(localStorage).forEach(function(key) {
                         if (!key.startsWith('review_') || key === 'review_templates') {
@@ -1485,41 +1648,79 @@
                                 return;
                             }
 
-                            const matchedRating = ratingOrder.find(rating => rating.toLowerCase() === evaluationRaw.toString().trim().toLowerCase());
-                            if (!matchedRating) {
+                            const reviewDateRaw = parsedValue && parsedValue.date;
+                            const reviewTimestamp = parseReviewDateToTimestamp(reviewDateRaw);
+
+                            if (isPeriodFilterActive) {
+                                if (!reviewTimestamp || reviewTimestamp < periodStart || reviewTimestamp > periodEnd) {
+                                    return;
+                                }
+                            }
+
+                            const normalizedEvaluation = evaluationRaw.toString().trim().toLowerCase();
+                            const matchedRating = ratingOrder.find(rating => rating.toLowerCase() === normalizedEvaluation);
+                            const isPending = normalizedEvaluation === pendingLabelNormalized;
+
+                            if (matchedRating) {
+                                stats[matchedRating] += 1;
+                                totalEvaluated += 1;
                                 return;
                             }
 
-                            stats[matchedRating] += 1;
-                            totalEvaluated += 1;
+                            if (isPending) {
+                                pendingCount += 1;
+                            }
                         } catch (error) {
                             console.error("[ReviewRemember] Erreur lors de la lecture de l'évaluation pour la clé :", key, error);
                         }
                     });
 
-                    return { stats, totalEvaluated, ratingOrder };
+                    return {
+                        stats,
+                        totalEvaluated,
+                        ratingOrder,
+                        pendingCount,
+                        mode: mode === 'all' ? 'all' : 'current',
+                        isPeriodFilterActive,
+                        periodStart,
+                        periodEnd
+                    };
                 }
 
-                function updateDateTimeElement(containerElement, dateTime, differenceText = '', differenceColor = '', evaluationStats = { stats: {}, totalEvaluated: 0, ratingOrder: [] }, showBreakdown = true) {
+                function computeAverageScore(evaluationStats) {
+                    const scoreWeights = {
+                        Excellent: 100,
+                        Bien: 74,
+                        Juste: 49,
+                        Pauvre: 0
+                    };
+
+                    const weightedSum = Object.keys(scoreWeights).reduce((sum, rating) => {
+                        const count = evaluationStats.stats && evaluationStats.stats[rating] ? evaluationStats.stats[rating] : 0;
+                        return sum + (count * scoreWeights[rating]);
+                    }, 0);
+
+                    const totalCount = Object.keys(scoreWeights).reduce((sum, rating) => {
+                        const count = evaluationStats.stats && evaluationStats.stats[rating] ? evaluationStats.stats[rating] : 0;
+                        return sum + count;
+                    }, 0);
+
+                    if (totalCount === 0) {
+                        return null;
+                    }
+
+                    return weightedSum / totalCount;
+                }
+
+                function updateDateTimeElement(containerElement, dateTime, differenceText = '', differenceColor = '', evaluationStats = { stats: {}, totalEvaluated: 0, ratingOrder: [] }, showBreakdown = true, showLastUpdate = true) {
+                    if (!showBreakdown && !showLastUpdate) {
+                        return;
+                    }
+
                     //Supprimer l'élément de date précédent s'il existe
                     let previousDateTimeElement = document.querySelector('.last-modification');
                     if (previousDateTimeElement) {
                         previousDateTimeElement.remove();
-                    }
-
-                    //Créer un nouvel élément de date
-                    const dateTimeElement = document.createElement('span');
-                    dateTimeElement.className = 'last-modification';
-                    dateTimeElement.style.display = 'block';
-                    dateTimeElement.style.marginTop = '8px';
-                    //dateTimeElement.style.marginLeft = '10px';
-                    dateTimeElement.innerHTML = `Dernière modification constatée le <strong>${dateTime}</strong>`;
-
-                    if (differenceText) {
-                        const differenceElement = document.createElement('span');
-                        differenceElement.style.color = differenceColor;
-                        differenceElement.textContent = ` (${differenceText})`;
-                        dateTimeElement.appendChild(differenceElement);
                     }
 
                     //Supprimer les anciennes informations de répartition si elles existent
@@ -1528,25 +1729,287 @@
                         previousBreakdown.remove();
                     }
 
+                    //Créer un nouvel élément de date
+                    const dateTimeElement = showLastUpdate ? document.createElement('span') : null;
+                    if (dateTimeElement) {
+                        dateTimeElement.className = 'last-modification';
+                        dateTimeElement.style.display = 'block';
+                        dateTimeElement.style.marginTop = '8px';
+                        //dateTimeElement.style.marginLeft = '10px';
+                        dateTimeElement.innerHTML = `Dernière modification constatée le <strong>${dateTime}</strong>`;
+
+                        if (differenceText) {
+                            const differenceElement = document.createElement('span');
+                            differenceElement.style.color = differenceColor;
+                            differenceElement.textContent = ` (${differenceText})`;
+                            dateTimeElement.appendChild(differenceElement);
+                        }
+                    }
+
                     if (showBreakdown) {
                         //Créer un nouvel élément pour la répartition des évaluations
                         const breakdownElement = document.createElement('div');
                         breakdownElement.className = 'rr-evaluation-breakdown';
                         breakdownElement.style.display = 'block';
                         breakdownElement.style.marginTop = '8px';
+                        const averageScore = computeAverageScore(evaluationStats);
+
+                        const buildShareText = () => {
+                            const modeLabelText =
+                                  evaluationStats.mode === 'all' || !evaluationStats.isPeriodFilterActive
+                            ? 'Toutes les évaluations'
+                            : 'Période actuelle';
+
+                            const lines = [];
+                            const scoreText = averageScore !== null ? `${averageScore.toFixed(1)}/100` : 'N/A';
+
+                            lines.push('📊 Bilan des évaluations');
+                            lines.push('');
+                            lines.push(`Score moyen (${modeLabelText}) : **${scoreText}**`);
+
+                            if (evaluationStats.isPeriodFilterActive && evaluationStats.periodStart !== null && evaluationStats.periodEnd !== null) {
+                                const startLabel = formatTimestampToDate(evaluationStats.periodStart);
+                                const endLabel = formatTimestampToDate(evaluationStats.periodEnd);
+                                lines.push(`🗓️ Période : du ${startLabel} au ${endLabel}`);
+                            }
+
+                            lines.push('');
+                            lines.push('📌 Répartition');
+
+                            const emojiByRating = {
+                                Excellent: '✅',
+                                Bien: '👍',
+                                Juste: '⚠️',
+                                Pauvre: '❌'
+                            };
+
+                            (evaluationStats.ratingOrder && evaluationStats.ratingOrder.length
+                             ? evaluationStats.ratingOrder
+                             : ['Excellent', 'Bien', 'Juste', 'Pauvre']
+                            ).forEach(rating => {
+                                const count = evaluationStats.stats && evaluationStats.stats[rating] ? evaluationStats.stats[rating] : 0;
+                                const percentage = evaluationStats.totalEvaluated > 0
+                                ? ((count / evaluationStats.totalEvaluated) * 100).toFixed(1)
+                                : '0.0';
+                                const emoji = emojiByRating[rating] || '•';
+
+                                //gras uniquement sur le pourcentage (et pas sur rating + count)
+                                lines.push(`${emoji} ${rating} : **${percentage}%** (${count})`);
+                            });
+
+                            const pendingCount = evaluationStats.pendingCount || 0;
+                            lines.push('');
+                            lines.push(`⏳ En attente : **${pendingCount}**`);
+                            lines.push(`Total évaluées : **${evaluationStats.totalEvaluated}**`);
+
+                            return lines.join('\n');
+                        };
+
+                        const copyShareText = async (text) => {
+                            const handleSuccess = () => {
+                                alert('Statistiques copiées dans le presse-papiers.');
+                            };
+                            const handleFallback = () => {
+                                const textarea = document.createElement('textarea');
+                                textarea.value = text;
+                                textarea.style.position = 'fixed';
+                                textarea.style.top = '0';
+                                textarea.style.left = '0';
+                                textarea.style.opacity = '0';
+                                document.body.appendChild(textarea);
+                                textarea.focus();
+                                textarea.select();
+                                try {
+                                    const successful = document.execCommand('copy');
+                                    if (successful) {
+                                        handleSuccess();
+                                    } else {
+                                        alert('Impossible de copier les statistiques.');
+                                    }
+                                } catch (error) {
+                                    console.error('[ReviewRemember] Échec de la copie des statistiques :', error);
+                                    alert('Impossible de copier les statistiques.');
+                                }
+                                document.body.removeChild(textarea);
+                            };
+
+                            if (navigator.clipboard && navigator.clipboard.writeText) {
+                                try {
+                                    await navigator.clipboard.writeText(text);
+                                    handleSuccess();
+                                    return;
+                                } catch (error) {
+                                    console.error('[ReviewRemember] Échec de la copie avec l’API Clipboard :', error);
+                                }
+                            }
+                            handleFallback();
+                        };
+
+                        const breakdownHeader = document.createElement('div');
+                        breakdownHeader.className = 'rr-evaluation-breakdown-header';
+                        breakdownHeader.style.display = 'flex';
+                        breakdownHeader.style.justifyContent = 'flex-start';
+                        breakdownHeader.style.alignItems = 'center';
+                        breakdownHeader.style.columnGap = '8px';
+                        breakdownHeader.style.rowGap = '6px';
+                        breakdownHeader.style.flexWrap = 'wrap';
+                        breakdownHeader.style.marginBottom = '4px';
+
+                        const modeLabel = document.createElement('span');
+                        modeLabel.className = 'rr-evaluation-breakdown-mode';
+                        if (evaluationStats.mode === 'all' || !evaluationStats.isPeriodFilterActive) {
+                            modeLabel.textContent = 'Toutes :';
+                        } else {
+                            const startLabel = formatTimestampToDate(evaluationStats.periodStart);
+                            const endLabel = formatTimestampToDate(evaluationStats.periodEnd);
+                            modeLabel.textContent = `Période actuelle :`;
+                        }
+                        breakdownHeader.appendChild(modeLabel);
+
+                        const actionButtons = document.createElement('div');
+                        actionButtons.style.display = 'flex';
+                        actionButtons.style.flexWrap = 'wrap';
+                        actionButtons.style.gap = '6px';
+                        actionButtons.style.alignItems = 'center';
+
+                        const toggleButton = document.createElement('button');
+                        toggleButton.type = 'button';
+                        toggleButton.className = 'a-button a-button-base a-button-mini';
+                        toggleButton.style.padding = '2px 8px';
+                        toggleButton.style.lineHeight = '1.4';
+                        toggleButton.style.whiteSpace = 'nowrap';
+                        toggleButton.textContent = evaluationStats.mode === 'all' ? '↻ Période actuelle' : '↻ Toutes';
+                        toggleButton.title = evaluationStats.mode === 'all'
+                            ? 'Afficher uniquement les évaluations de la période actuelle'
+                        : 'Afficher toutes les évaluations enregistrées';
+                        let lastToggleTime = 0;
+                        const handleToggle = (event) => {
+                            if (event) {
+                                event.preventDefault();
+                                event.stopPropagation();
+                            }
+                            const now = Date.now();
+                            if (now - lastToggleTime < 300) {
+                                return;
+                            }
+                            lastToggleTime = now;
+                            const nextMode = evaluationStats.mode === 'all' ? 'current' : 'all';
+                            localStorage.setItem('evaluationBreakdownMode', nextMode);
+                            const updatedStats = computeEvaluationStats(nextMode);
+                            updateDateTimeElement(containerElement, dateTime, differenceText, differenceColor, updatedStats, showBreakdown, showLastUpdate);
+                        };
+                        toggleButton.addEventListener('click', handleToggle);
+                        toggleButton.addEventListener('touchend', handleToggle, { passive: false });
+                        actionButtons.appendChild(toggleButton);
+
+                        const shareButton = document.createElement('button');
+                        shareButton.type = 'button';
+                        shareButton.className = 'a-button a-button-base a-button-mini';
+                        shareButton.style.padding = '2px 8px';
+                        shareButton.style.lineHeight = '1.4';
+                        shareButton.style.whiteSpace = 'nowrap';
+                        shareButton.textContent = 'Partager';
+                        shareButton.title = 'Copier le score moyen et la répartition pour Discord';
+                        const handleShare = (event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            const shareText = buildShareText();
+                            copyShareText(shareText);
+                        };
+                        shareButton.addEventListener('click', handleShare);
+                        shareButton.addEventListener('touchend', handleShare, { passive: false });
+                        actionButtons.appendChild(shareButton);
+
+                        breakdownHeader.appendChild(actionButtons);
+                        breakdownElement.appendChild(breakdownHeader);
+
+                        const ratingColorMap = {
+                            'Excellent': '🟦',
+                            'Bien': '🟩',
+                            'Juste': '🟧',
+                            'Pauvre': '🟥',
+                            'En attente': '⬜️'
+                        };
 
                         const breakdownItems = (evaluationStats.ratingOrder && evaluationStats.ratingOrder.length ? evaluationStats.ratingOrder : ['Excellent', 'Bien', 'Juste', 'Pauvre']).map(rating => {
                             const count = evaluationStats.stats && evaluationStats.stats[rating] ? evaluationStats.stats[rating] : 0;
                             const percentage = evaluationStats.totalEvaluated > 0 ? ((count / evaluationStats.totalEvaluated) * 100).toFixed(1) : '0.0';
-                            return `<strong>${rating}</strong> : ${percentage}% (${count})`;
+                            const colorSquare = ratingColorMap[rating] || '⬜';
+                            return `${colorSquare} <strong>${rating}</strong> : ${percentage}% (${count})`;
                         });
 
-                        breakdownElement.innerHTML = breakdownItems.join(' | ');
+                        const pendingCount = evaluationStats.pendingCount || 0;
+                        if (pendingCount > 0 || evaluationStats.pendingCount === 0) {
+                            breakdownItems.push(`${ratingColorMap['En attente']} <strong>En attente</strong> : ${pendingCount}`);
+                        }
 
-                        //Insérer les nouveaux éléments après le conteneur de progression
-                        containerElement.parentNode.insertBefore(breakdownElement, containerElement.nextSibling);
-                        breakdownElement.insertAdjacentElement('afterend', dateTimeElement);
-                    } else {
+                        const breakdownContent = document.createElement('div');
+                        breakdownContent.innerHTML = breakdownItems.join('<br>');
+                        breakdownElement.appendChild(breakdownContent);
+
+                        const scoreInfoText = "Ce score reste une simple estimation, mais la perspicacité moyenne peut probablement être lu ainsi :\n\n- 75 à 100 : Excellent\n- 50 à 74 : Bon\n- 25 à 49 : Passable\n- 0 à 24 : Mauvais\n\nElle ne comprend que les avis qui sont en mémoire (après un scan ou avoir parcouru les pages des avis vérifiés). Le score affichait par Amazon peut varier de ce score car nous ne connaissons pas le calcul exact, et il peut également prendre en compte des évaluations qui ne sont pas encore en mémoire ou également mettre un certain délai à s'actualiser.";
+                        const scoreElement = document.createElement('div');
+                        scoreElement.style.marginTop = '6px';
+                        const scoreText = averageScore !== null ? `${averageScore.toFixed(1)} / 100` : 'N/A';
+
+                        const scoreLabel = document.createElement('strong');
+                        scoreLabel.textContent = 'Score moyen :';
+                        scoreElement.appendChild(scoreLabel);
+
+                        const scoreValue = document.createElement('span');
+                        scoreValue.textContent = ` ${scoreText} `;
+                        scoreElement.appendChild(scoreValue);
+
+                        const scoreInfoButton = document.createElement('button');
+                        scoreInfoButton.type = 'button';
+                        scoreInfoButton.textContent = '?';
+                        scoreInfoButton.title = scoreInfoText;
+                        scoreInfoButton.setAttribute('aria-label', 'Afficher les explications du score moyen');
+                        scoreInfoButton.className = 'a-button a-button-base a-button-mini rr-evaluation-cta';
+                        scoreInfoButton.style.padding = '0 8px';
+                        scoreInfoButton.style.lineHeight = '1.4';
+                        scoreInfoButton.style.cursor = 'pointer';
+                        scoreInfoButton.addEventListener('click', function(event) {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            alert(scoreInfoText);
+                        });
+                        scoreElement.appendChild(scoreInfoButton);
+
+                        breakdownElement.appendChild(scoreElement);
+
+                        const lastScanLabel = readScanCompletion();
+                        if (lastScanLabel) {
+                            const lastScanElement = document.createElement('div');
+                            lastScanElement.className = 'rr-last-scan';
+                            lastScanElement.style.marginTop = '4px';
+                            lastScanElement.innerHTML = `Dernier scan des évaluations le <strong>${lastScanLabel}</strong>`;
+                            breakdownElement.appendChild(lastScanElement);
+                        }
+
+                        //Insérer les nouveaux éléments dans l'encadré "Évaluer le score de perspicacité" si disponible
+                        const insightfulnessContainer = document.querySelector('#vvp-num-review-insightfulness-score-metric-display');
+                        if (insightfulnessContainer) {
+                            const insertionTarget = insightfulnessContainer.querySelector('.status-bar')
+                            || insightfulnessContainer.lastElementChild
+                            || insightfulnessContainer;
+                            insertionTarget.insertAdjacentElement('afterend', breakdownElement);
+                        } else {
+                            //Fallback : conserver le placement historique si l'encadré n'est pas présent
+                            containerElement.parentNode.insertBefore(breakdownElement, containerElement.nextSibling);
+                            if (dateTimeElement) {
+                                breakdownElement.insertAdjacentElement('afterend', dateTimeElement);
+                            }
+                            return;
+                        }
+
+                        if (!dateTimeElement) {
+                            return;
+                        }
+                    }
+
+                    //Placer la date de dernière modification près de la barre de progression principale
+                    if (dateTimeElement) {
                         containerElement.parentNode.insertBefore(dateTimeElement, containerElement.nextSibling);
                     }
                 }
@@ -1570,6 +2033,7 @@
                 insertResult(missingArticles, percentage, evaluatedArticles, storedValue);
                 centerContentVertically();
                 removeGreyText();
+                trimInsightfulnessReminder();
 
                 //Extraction des données de la page
                 function extractData() {
@@ -1647,6 +2111,27 @@
                         greyTextElement.remove();
                     }
                 }
+
+                function trimInsightfulnessReminder() {
+                    const insightfulnessContainer = document.querySelector('#vvp-num-review-insightfulness-score-metric-display');
+                    if (!insightfulnessContainer) {
+                        return;
+                    }
+
+                    const guidelinesLink = insightfulnessContainer.querySelector('a[href="https://www.amazon.fr/vine/resources#review_guidelines"]');
+                    if (!guidelinesLink) {
+                        return;
+                    }
+
+                    const parentParagraph = guidelinesLink.closest('p');
+                    if (!parentParagraph) {
+                        return;
+                    }
+
+                    const newParagraph = document.createElement('p');
+                    newParagraph.appendChild(guidelinesLink);
+                    parentParagraph.replaceWith(newParagraph);
+                }
             }
         }
 
@@ -1691,6 +2176,31 @@
         function dateDiffInDays(date1, date2) {
             const diffInTime = date2.getTime() - date1.getTime();
             return Math.floor(diffInTime / (1000 * 3600 * 24));
+        }
+
+        function storeEvaluationStartStamp() {
+            if (!document.URL.startsWith('https://www.amazon.fr/vine/account')) {
+                return;
+            }
+
+            const startElement = document.getElementById('vvp-eval-start-stamp');
+            if (!startElement) {
+                return;
+            }
+
+            const stamp = parseInt(startElement.textContent, 10);
+            const normalized = normalizeTimestamp(stamp);
+            if (normalized === null) {
+                return;
+            }
+
+            const stored = getStoredEvaluationPeriodStart();
+            if (stored && stored.startTs === normalized) {
+                return;
+            }
+
+            const formatted = formatDate(new Date(normalized));
+            persistEvaluationPeriodStart(normalized, formatted);
         }
 
         //Style pour "Pas encore examiné"
@@ -1877,10 +2387,36 @@
 
         function getAsinFromRow(row) {
             const link = row.querySelector('#vvp-reviews-product-detail-page-link, a[href*="/dp/"]');
-            if (!link) {
-                return null;
+            if (link) {
+                const asinFromLink = extractASIN(link.href);
+                if (asinFromLink) {
+                    return asinFromLink;
+                }
             }
-            return extractASIN(link.href);
+
+            const textColumns = row.querySelectorAll('.vvp-reviews-table--text-col');
+            for (const cell of textColumns) {
+                const asinFromText = extractASIN(cell.textContent.trim());
+                if (asinFromText) {
+                    return asinFromText;
+                }
+            }
+
+            return null;
+        }
+
+        function getProductNameFromRow(row) {
+            const link = row.querySelector('#vvp-reviews-product-detail-page-link, a[href*="/dp/"]');
+            if (!link) {
+                return '';
+            }
+
+            const fullText = link.querySelector('.a-truncate-full');
+            if (fullText) {
+                return fullText.textContent.trim();
+            }
+
+            return link.textContent.trim();
         }
 
         function syncQualityEvaluations() {
@@ -1893,28 +2429,50 @@
                 }
 
                 const textColumns = row.querySelectorAll('.vvp-reviews-table--text-col');
+                const dateCell = textColumns[1];
                 const evaluationCell = textColumns[3];
+                const dateValue = dateCell ? dateCell.textContent.trim() : '';
+                const productName = getProductNameFromRow(row);
                 const evaluationValue = evaluationCell ? evaluationCell.textContent.trim() : '';
-
-                if (!evaluationValue || evaluationValue.toLowerCase() === 'en attente') {
-                    return;
-                }
 
                 const storageKey = `review_${asin}`;
                 const storedReview = localStorage.getItem(storageKey);
-                if (!storedReview) {
-                    return;
-                }
-
                 try {
-                    const parsedReview = JSON.parse(storedReview);
-                    if (parsedReview.evaluation === evaluationValue) {
+                    const parsedReview = storedReview ? JSON.parse(storedReview) : null;
+                    if (!parsedReview) {
+                        const newEntry = {
+                            title: '',
+                            review: '',
+                            date: dateValue || '',
+                            evaluation: evaluationValue,
+                            name: productName
+                        };
+                        localStorage.setItem(storageKey, JSON.stringify(newEntry));
                         return;
                     }
-                    parsedReview.evaluation = evaluationValue;
-                    localStorage.setItem(storageKey, JSON.stringify(parsedReview));
+
+                    let shouldUpdate = false;
+
+                    if (evaluationValue && parsedReview.evaluation !== evaluationValue) {
+                        parsedReview.evaluation = evaluationValue;
+                        shouldUpdate = true;
+                    }
+
+                    if (productName && parsedReview.name !== productName) {
+                        parsedReview.name = productName;
+                        shouldUpdate = true;
+                    }
+
+                    if (!parsedReview.date && dateValue) {
+                        parsedReview.date = dateValue;
+                        shouldUpdate = true;
+                    }
+
+                    if (shouldUpdate) {
+                        localStorage.setItem(storageKey, JSON.stringify(parsedReview));
+                    }
                 } catch (error) {
-                    console.error("[ReviewRemember] Erreur lors de la mise à jour de l'évaluation pour l'ASIN :", asin, error);
+                    console.error("[ReviewRemember] Erreur lors de la mise à jour des informations pour l'ASIN :", asin, error);
                 }
             });
         }
@@ -1940,6 +2498,510 @@
             };
 
             ensureSync();
+        }
+
+        const scanStorageKey = 'rr-vine-scan-state';
+        const evaluationStartStorageKey = 'rr-vine-eval-start';
+        const scanCompletionStorageKey = 'rr-vine-scan-completed-at';
+        const scanStopAllTs = new Date(2025, 5, 9).setHours(0, 0, 0, 0);
+        let isScanStepRunning = false;
+        let scanNavigationTimeout = null;
+        let scanActionsUi = null;
+        let scanCountdownInterval = null;
+        let scanNavigationEta = null;
+
+        //Retourne {startDate:"DD/MM/YYYY", startTs:number, sourceText:string, node:Element} ou null
+        function getVineEvaluationPeriodStartFromAccountPage(root = document) {
+            function parseFromNode(node) {
+                const txt = (node.textContent || '').replace(/\u00a0/g, ' ').trim();
+                const patterns = [
+                    /(\d{1,2}\s+[a-zA-Zéèêëàâäîïôöûüç\.]+\s+\d{4})\s*-/,
+                    /(\d{2}\/\d{2}\/\d{4})\s*-/,
+                    /(\d{1,2}\s+[a-zA-Zéèêëàâäîïôöûüç\.]+)\s+\d{4}/,
+                    /(\d{2}\/\d{2}\/\d{4})/
+                ];
+
+                for (const pattern of patterns) {
+                    const match = txt.match(pattern);
+                    if (match && match[1]) {
+                        const parsed = parseDDMMYYYYFlexible(match[1]);
+                        if (parsed) {
+                            return {
+                                startDate: parsed.str,
+                                startTs: parsed.ts,
+                                sourceText: txt,
+                                node
+                            };
+                        }
+                    }
+                }
+
+                return null;
+            }
+
+            let el = root.getElementById('vvp-evaluation-period-tooltip-trigger');
+            if (!el) {
+                el = Array.from(root.querySelectorAll('span, div, p'))
+                    .find(e => /période|évaluation/i.test(e.textContent));
+            }
+            if (!el) return null;
+
+            return parseFromNode(el);
+        }
+
+        function persistEvaluationPeriodStart(startTs, startDate) {
+            const normalizedTs = normalizeTimestamp(startTs);
+            if (normalizedTs === null) {
+                return null;
+            }
+            const label = startDate || formatDate(new Date(normalizedTs));
+            const payload = { startTs: normalizedTs, startDate: label };
+            localStorage.setItem(evaluationStartStorageKey, JSON.stringify(payload));
+            return payload;
+        }
+
+        function getStoredEvaluationPeriodStart() {
+            const raw = localStorage.getItem(evaluationStartStorageKey);
+            if (!raw) {
+                return null;
+            }
+            try {
+                if (raw.includes('/')) {
+                    const parsed = parseDDMMYYYYFlexible(raw);
+                    if (parsed) {
+                        return { startTs: parsed.ts, startDate: parsed.str };
+                    }
+                    return null;
+                }
+                const parsed = JSON.parse(raw);
+                if (!parsed || !parsed.startTs) {
+                    return null;
+                }
+                const normalized = normalizeTimestamp(parsed.startTs);
+                if (normalized === null) {
+                    return null;
+                }
+                return {
+                    startTs: normalized,
+                    startDate: parsed.startDate || formatDate(new Date(normalized))
+                };
+            } catch (error) {
+                console.error('[ReviewRemember] Impossible de lire la période d\'évaluation stockée', error);
+                return null;
+            }
+        }
+
+        async function fetchEvaluationPeriodStart() {
+            const stored = getStoredEvaluationPeriodStart();
+            if (stored) {
+                return stored;
+            }
+
+            const direct = getVineEvaluationPeriodStartFromAccountPage(document);
+            if (direct) {
+                return persistEvaluationPeriodStart(direct.startTs, direct.startDate) || direct;
+            }
+
+            try {
+                const response = await fetch('https://www.amazon.fr/vine/account', { credentials: 'include' });
+                const html = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const fetched = getVineEvaluationPeriodStartFromAccountPage(doc);
+                if (fetched) {
+                    return persistEvaluationPeriodStart(fetched.startTs, fetched.startDate) || fetched;
+                }
+                return null;
+            } catch (error) {
+                console.error('[ReviewRemember] Impossible de récupérer la période d\'évaluation', error);
+                return null;
+            }
+        }
+
+        function readScanState() {
+            try {
+                return JSON.parse(localStorage.getItem(scanStorageKey));
+            } catch (error) {
+                console.error('[ReviewRemember] Impossible de lire l\'état du scan', error);
+                return null;
+            }
+        }
+
+        function saveScanState(state) {
+            localStorage.setItem(scanStorageKey, JSON.stringify(state));
+        }
+
+        function readScanCompletion() {
+            return localStorage.getItem(scanCompletionStorageKey);
+        }
+
+        function saveScanCompletion() {
+            const label = new Date().toLocaleString('fr-FR');
+            localStorage.setItem(scanCompletionStorageKey, label);
+            return label;
+        }
+
+        function clearScanState() {
+            localStorage.removeItem(scanStorageKey);
+        }
+
+        function normalizeTimestamp(tsRaw) {
+            if (!Number.isFinite(tsRaw)) return null;
+            const ts = tsRaw > 1000000000000 ? tsRaw : tsRaw * 1000;
+            const date = new Date(ts);
+            if (!Number.isFinite(date.getTime())) return null;
+            return date.setHours(0, 0, 0, 0);
+        }
+
+        function extractOrderDateTs(row) {
+            const textColumns = row.querySelectorAll('.vvp-reviews-table--text-col');
+            const dateCell = textColumns[1];
+            if (!dateCell) return null;
+
+            const tsAttr = Number(dateCell.dataset.orderTimestamp);
+            if (Number.isFinite(tsAttr)) {
+                const normalized = normalizeTimestamp(tsAttr);
+                if (normalized !== null) return normalized;
+            }
+
+            const parsed = parseDDMMYYYYFlexible(dateCell.textContent);
+            return parsed ? parsed.ts : null;
+        }
+
+        function detectOlderReview(limitTs) {
+            const rows = document.querySelectorAll('.vvp-reviews-table--row');
+            let foundOlder = false;
+            let oldest = null;
+
+            rows.forEach(row => {
+                const ts = extractOrderDateTs(row);
+                if (ts === null) return;
+
+                if (oldest === null || ts < oldest) {
+                    oldest = ts;
+                }
+
+                if (ts < limitTs) {
+                    foundOlder = true;
+                }
+            });
+
+            return { foundOlder, oldest };
+        }
+
+        function findNextReviewPageUrl() {
+            const pagination = findPaginationBlock();
+            if (!pagination) return null;
+
+            const selected = pagination.querySelector('li.a-selected');
+            if (selected) {
+                let cursor = selected.nextElementSibling;
+                while (cursor) {
+                    const link = cursor.querySelector('a');
+                    if (link && link.href) {
+                        return link.href;
+                    }
+                    cursor = cursor.nextElementSibling;
+                }
+            }
+
+            const fallback = pagination.querySelector('li.a-last a');
+            return fallback ? fallback.href : null;
+        }
+
+        function goToReviewPage(pageNumber) {
+            const urlObj = new URL(window.location.href);
+            const currentPageParam = urlObj.searchParams.get('page');
+            const currentPage = Number(currentPageParam || '1');
+            const targetPage = Number(pageNumber);
+            if (urlObj.searchParams.get('review-type') === 'completed' && currentPage === targetPage) {
+                handleReviewScanIfNeeded();
+                return;
+            }
+            urlObj.searchParams.set('page', pageNumber);
+            if (!urlObj.searchParams.get('review-type')) {
+                urlObj.searchParams.set('review-type', 'completed');
+            }
+            window.location.href = urlObj.toString();
+        }
+
+        function getRandomScanDelayMs() {
+            return 3000 + Math.floor(Math.random() * 2001);
+        }
+
+        function updateScanDelayDisplay() {
+            if (!scanActionsUi || !scanActionsUi.delayInfo || !scanNavigationEta) {
+                if (scanActionsUi && scanActionsUi.delayInfo) {
+                    scanActionsUi.delayInfo.textContent = '';
+                    scanActionsUi.delayInfo.style.display = 'none';
+                }
+                return;
+            }
+            const remainingMs = Math.max(0, scanNavigationEta - Date.now());
+            const seconds = Math.ceil(remainingMs / 1000);
+            scanActionsUi.delayInfo.textContent = `Prochaine page dans ${seconds}s`;
+            scanActionsUi.delayInfo.style.display = 'flex';
+        }
+
+        function startScanDelayCountdown(delayMs) {
+            stopScanDelayCountdown();
+            if (!delayMs) {
+                return;
+            }
+            scanNavigationEta = Date.now() + delayMs;
+            updateScanDelayDisplay();
+            scanCountdownInterval = setInterval(() => {
+                updateScanDelayDisplay();
+            }, 1000);
+        }
+
+        function stopScanDelayCountdown() {
+            if (scanCountdownInterval !== null) {
+                clearInterval(scanCountdownInterval);
+                scanCountdownInterval = null;
+            }
+            scanNavigationEta = null;
+            if (scanActionsUi && scanActionsUi.delayInfo) {
+                scanActionsUi.delayInfo.textContent = '';
+                scanActionsUi.delayInfo.style.display = 'none';
+            }
+        }
+
+        function stopReviewScan() {
+            clearScanState();
+            if (scanNavigationTimeout !== null) {
+                clearTimeout(scanNavigationTimeout);
+                scanNavigationTimeout = null;
+            }
+            isScanStepRunning = false;
+            stopScanDelayCountdown();
+            refreshScanActionsUi();
+        }
+
+        function waitForReviewsTable(callback, attempt = 0) {
+            const rows = document.querySelectorAll('.vvp-reviews-table--row');
+            if (rows.length > 0 || attempt >= 20) {
+                callback();
+                return;
+            }
+            setTimeout(() => waitForReviewsTable(callback, attempt + 1), 250);
+        }
+
+        function handleReviewScanIfNeeded() {
+            const state = readScanState();
+            if (!state) return;
+
+            if (!window.location.href.includes('review-type=completed')) {
+                clearScanState();
+                stopScanDelayCountdown();
+                refreshScanActionsUi();
+                return;
+            }
+
+            if (isScanStepRunning) {
+                return;
+            }
+            isScanStepRunning = true;
+
+            waitForReviewsTable(() => {
+                const limitTs = Number(state.limitTs);
+                if (!Number.isFinite(limitTs)) {
+                    clearScanState();
+                    stopScanDelayCountdown();
+                    refreshScanActionsUi();
+                    isScanStepRunning = false;
+                    return;
+                }
+
+                const result = detectOlderReview(limitTs);
+                if (result.foundOlder) {
+                    saveScanCompletion();
+                    clearScanState();
+                    stopScanDelayCountdown();
+                    alert(`Scan terminé : avis plus ancien que ${state.limitLabel || 'la limite'} trouvé.`);
+                    refreshScanActionsUi();
+                    isScanStepRunning = false;
+                    return;
+                }
+
+                const nextUrl = findNextReviewPageUrl();
+                if (!nextUrl) {
+                    saveScanCompletion();
+                    clearScanState();
+                    stopScanDelayCountdown();
+                    alert('Scan terminé: aucune page suivante trouvée.');
+                    refreshScanActionsUi();
+                    isScanStepRunning = false;
+                    return;
+                }
+
+                const delayMs = getRandomScanDelayMs();
+                startScanDelayCountdown(delayMs);
+                scanNavigationTimeout = setTimeout(() => {
+                    scanNavigationTimeout = null;
+                    if (!readScanState()) {
+                        isScanStepRunning = false;
+                        stopScanDelayCountdown();
+                        refreshScanActionsUi();
+                        return;
+                    }
+                    window.location.href = nextUrl;
+                }, delayMs);
+            });
+        }
+
+        async function startPeriodScan() {
+            const evaluation = await fetchEvaluationPeriodStart();
+            if (!evaluation) {
+                alert('Impossible de trouver la date de début de la période d\'évaluation.');
+                return;
+            }
+
+            saveScanState({
+                mode: 'period',
+                limitTs: evaluation.startTs,
+                limitLabel: evaluation.startDate
+            });
+            stopScanDelayCountdown();
+            refreshScanActionsUi();
+            goToReviewPage(1);
+        }
+
+        function startFullScan() {
+            saveScanState({
+                mode: 'all',
+                limitTs: scanStopAllTs,
+                limitLabel: '09/06/2025'
+            });
+            stopScanDelayCountdown();
+            refreshScanActionsUi();
+            goToReviewPage(1);
+        }
+
+        function toggleReviewScan(mode) {
+            const state = readScanState();
+            if (state) {
+                stopReviewScan();
+                return;
+            }
+            if (mode === 'period') {
+                startPeriodScan();
+            } else {
+                startFullScan();
+            }
+        }
+
+        function refreshScanActionsUi() {
+            if (!scanActionsUi) return;
+            const state = readScanState();
+            const hasEvaluationStart = !!getStoredEvaluationPeriodStart();
+            const shouldDisable = !hasEvaluationStart && !state;
+            const { btnAll, btnPeriod, btnAllText, btnPeriodText, warning } = scanActionsUi;
+            btnAll.style.display = 'inline-flex';
+            btnPeriod.style.display = 'inline-flex';
+            btnAllText.textContent = 'Tout scanner';
+            btnPeriodText.textContent = 'Scanner la période';
+            [btnAll, btnPeriod].forEach(btn => {
+                btn.style.opacity = shouldDisable ? '0.5' : '1';
+                btn.style.pointerEvents = shouldDisable ? 'none' : 'auto';
+            });
+            if (warning) {
+                warning.style.display = shouldDisable ? 'block' : 'none';
+            }
+            if (state) {
+                const activeBtn = state.mode === 'period' ? btnPeriod : btnAll;
+                const inactiveBtn = state.mode === 'period' ? btnAll : btnPeriod;
+                const activeText = state.mode === 'period' ? btnPeriodText : btnAllText;
+                inactiveBtn.style.display = 'none';
+                activeText.textContent = 'Arrêter le scan';
+                updateScanDelayDisplay();
+            } else {
+                stopScanDelayCountdown();
+            }
+        }
+
+        function addReviewScanButtons() {
+            if (!window.location.href.includes('review-type=completed')) {
+                return;
+            }
+
+            const header = document.querySelector('.vvp-reviews-table--heading-top');
+            if (!header) {
+                setTimeout(addReviewScanButtons, 500);
+                return;
+            }
+
+            if (header.querySelector('.rr-scan-actions')) {
+                return;
+            }
+
+            const container = document.createElement('div');
+            container.className = 'rr-scan-actions';
+            container.style.display = 'flex';
+            container.style.flexWrap = 'wrap';
+            container.style.gap = '8px';
+            container.style.marginTop = '10px';
+
+            const btnAll = document.createElement('span');
+            btnAll.className = 'a-button a-button-primary vvp-reviews-table--action-btn';
+            const btnAllInner = document.createElement('span');
+            btnAllInner.className = 'a-button-inner';
+            const btnAllText = document.createElement('a');
+            btnAllText.className = 'a-button-text';
+            btnAllText.href = 'javascript:void(0)';
+            btnAllText.textContent = 'Tout scanner';
+            btnAllText.addEventListener('click', () => toggleReviewScan('all'));
+            btnAllInner.appendChild(btnAllText);
+            btnAll.appendChild(btnAllInner);
+
+            const btnPeriod = document.createElement('span');
+            btnPeriod.className = 'a-button a-button-primary vvp-reviews-table--action-btn';
+            const btnPeriodInner = document.createElement('span');
+            btnPeriodInner.className = 'a-button-inner';
+            const btnPeriodText = document.createElement('a');
+            btnPeriodText.className = 'a-button-text';
+            btnPeriodText.href = 'javascript:void(0)';
+            btnPeriodText.textContent = 'Scanner la période';
+            btnPeriodText.addEventListener('click', () => toggleReviewScan('period'));
+            btnPeriodInner.appendChild(btnPeriodText);
+            btnPeriod.appendChild(btnPeriodInner);
+
+            const btnHelp = document.createElement('span');
+            btnHelp.className = 'a-button vvp-reviews-table--action-btn';
+            const btnHelpInner = document.createElement('span');
+            btnHelpInner.className = 'a-button-inner';
+            const btnHelpText = document.createElement('a');
+            btnHelpText.className = 'a-button-text';
+            btnHelpText.href = 'javascript:void(0)';
+            btnHelpText.textContent = '?';
+            btnHelpText.addEventListener('click', () => alert("Le scan des avis vérifiés permet de mettre à jour dans la mémoire locale la date, le nom du produit et son évaluation. Le scan va parcourir les pages automatiquement avec un délai aléatoire, il faut juste le laisser faire.\n- Tout scanner : scannera jusqu'au 10/06/2025, date à laquelle les évaluations commencent\n- Scanner la période : scannera jusqu'à la date du début de votre période d'évaluation actuelle"));
+            btnHelpInner.appendChild(btnHelpText);
+            btnHelp.appendChild(btnHelpInner);
+
+            const delayInfo = document.createElement('span');
+            delayInfo.className = 'rr-scan-delay-info';
+            delayInfo.style.display = 'none';
+            delayInfo.style.alignItems = 'center';
+            delayInfo.style.fontSize = '12px';
+            delayInfo.style.paddingLeft = '4px';
+
+            const warning = document.createElement('div');
+            warning.style.display = 'none';
+            warning.style.fontSize = '12px';
+            warning.style.color = '#c45500';
+            warning.style.lineHeight = '16px';
+            warning.innerHTML = 'Le scan nécessite au moins une visite de la page Compte. Rendez-vous sur <a href="https://www.amazon.fr/vine/account" target="_blank">https://www.amazon.fr/vine/account</a> puis revenez ici.';
+
+            container.appendChild(btnAll);
+            container.appendChild(btnPeriod);
+            container.appendChild(btnHelp);
+            container.appendChild(delayInfo);
+            container.appendChild(warning);
+
+            scanActionsUi = { btnAll, btnPeriod, btnAllText, btnPeriodText, delayInfo, warning };
+            refreshScanActionsUi();
+
+            header.appendChild(container);
         }
 
         //Ajoute les pages en partie haute
@@ -2441,6 +3503,7 @@
         var emailEnabled = localStorage.getItem('emailEnabled');
         var lastUpdateEnabled = localStorage.getItem('lastUpdateEnabled');
         var evaluationBreakdownEnabled = localStorage.getItem('evaluationBreakdownEnabled');
+        var evaluationBreakdownMode = localStorage.getItem('evaluationBreakdownMode');
         var targetPercentageEnabled = localStorage.getItem('targetPercentageEnabled');
         var hideHighlightedReviewsEnabled = localStorage.getItem('hideHighlightedReviewsEnabled');
         var autoSaveEnabled = localStorage.getItem('autoSaveEnabled');
@@ -2501,6 +3564,11 @@
             localStorage.setItem('evaluationBreakdownEnabled', evaluationBreakdownEnabled);
         }
 
+        if (evaluationBreakdownMode === null) {
+            evaluationBreakdownMode = 'current';
+            localStorage.setItem('evaluationBreakdownMode', evaluationBreakdownMode);
+        }
+
         if (targetPercentageEnabled === null) {
             targetPercentageEnabled = 'true';
             localStorage.setItem('targetPercentageEnabled', targetPercentageEnabled);
@@ -2554,8 +3622,8 @@
             addMail();
         }
 
-        if (lastUpdateEnabled === 'true') {
-            lastUpdate();
+        if (lastUpdateEnabled === 'true' || evaluationBreakdownEnabled === 'true') {
+            lastUpdate(lastUpdateEnabled === 'true', evaluationBreakdownEnabled === 'true');
         }
 
         if (targetPercentageEnabled === 'true') {
@@ -2570,6 +3638,8 @@
             autoSaveReview();
         }
 
+        addReviewScanButtons();
+        handleReviewScanIfNeeded();
         initQualityEvaluationSync();
         //End
 
@@ -2589,6 +3659,23 @@
                 if (textarea) {
                     textarea.style.height = '300px'; //Définit la hauteur à 300px
                     textarea.style.resize = 'both';
+                    //Ajoute un compteur de caractères en temps réel sous la zone de texte
+                    if (!document.getElementById('rr-char-counter')) {
+                        const counter = document.createElement('div');
+                        counter.id = 'rr-char-counter';
+                        counter.style.marginTop = '8px';
+                        counter.style.fontSize = '12px';
+                        counter.style.color = '#565959';
+                        counter.textContent = `Caractères : ${textarea.value.length}`;
+                        textarea.insertAdjacentElement('afterend', counter);
+
+                        const updateCounter = () => {
+                            counter.textContent = `Caractères : ${textarea.value.length}`;
+                        };
+
+                        textarea.addEventListener('input', updateCounter);
+                        textarea.addEventListener('change', updateCounter);
+                    }
                 }
                 //Ajout multiple de fichiers média (nouveau comportement)
                 var inputElement = document.querySelector(
@@ -2895,6 +3982,8 @@
             if (elem) {
                 elem.style.display = 'none';
             }
+
+            storeEvaluationStartStamp();
         });
     }
     var RREnabled = localStorage.getItem('RREnabled');
